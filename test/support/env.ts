@@ -8,6 +8,7 @@ export function createTestEnv(): AppEnv {
   return {
     DB: createD1(),
     IMAGES: createR2(),
+    BACKUPS: createR2(),
     ACCESS_TEAM_DOMAIN: 'https://example.cloudflareaccess.com',
     ACCESS_POLICY_AUD: 'test-audience',
     ALLOWED_EMAILS: '',

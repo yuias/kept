@@ -4,3 +4,6 @@
 ACCESS_TEAM_DOMAIN="https://example.cloudflareaccess.com"
 ACCESS_POLICY_AUD="dummy-aud-tag"
 ALLOWED_EMAILS="dev@localhost"
+# Left empty: the export API always targets the remote production database,
+# even when the `scheduled` handler is triggered from `wrangler dev`.
+D1_EXPORT_API_TOKEN=""

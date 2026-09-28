@@ -138,6 +138,92 @@ valid. The only way out is signing out. `/api/me` reports this case as
 `stale: true`, and protected routes return 401 `session_stale`; the UI shows
 a sign-out link rather than a sign-in link in this state.
 
+## Backup
+
+A Cron Trigger wakes the `scheduled` handler, which polls D1's export API for
+a signed URL and writes its contents to R2 as `backups/YYYY-MM-DD.sql`. The
+signed URL is valid for one hour, so it is spent as soon as it is issued.
+
+**Only the D1 database is exported. Images in the `kept-images` R2 bucket are
+not backed up by this mechanism.**
+
+### Setup
+
+```sh
+pnpm exec wrangler r2 bucket create kept-backups
+pnpm exec wrangler secret put D1_EXPORT_API_TOKEN   # needs D1:Edit, not D1:Read
+pnpm deploy
+```
+
+The export is a `POST` that generates a dump, so the token needs `D1 : Edit`
+rather than read access; a `D1 : Read`-only token gets a 401 `Authentication
+error` from `.../export`.
+
+`CLOUDFLARE_ACCOUNT_ID` and `D1_DATABASE_ID` live in `wrangler.jsonc`'s
+`vars`. The export API is reached over plain HTTP, which the `DB` binding
+does not expose, so the ids have to be repeated there even though
+`D1_DATABASE_ID` already matches `d1_databases[0].database_id`.
+
+### Schedule and retention
+
+| Setting  | Location                                       | Default                |
+| -------- | ----------------------------------------------- | ----------------------- |
+| Interval | `wrangler.jsonc`'s `triggers.crons`             | `0 21 * * SUN`           |
+| Retention| `wrangler.jsonc`'s `vars.BACKUP_RETENTION_DAYS` | `56` (8 weeks)          |
+
+Both are deploy-time settings, so changing either needs `pnpm deploy`.
+
+Cron Triggers are evaluated in UTC. `0 21 * * SUN` is JST Monday 06:00 —
+writing the JST time directly would land the schedule on the wrong weekday.
+Cloudflare also numbers weekdays `1 = Sunday` through `7 = Saturday`, one off
+from most cron implementations; `0` is rejected outright with `invalid cron
+string [code: 10100]`, so the day is spelled out (`SUN`) to sidestep both
+issues.
+
+The retention is stamped onto each object as `expiresAt` custom metadata at
+write time, and cleanup only looks at that stamp. A change to
+`BACKUP_RETENTION_DAYS` therefore never reaches backwards into backups that
+already exist: shortening it does not delete anything early, and lengthening
+it does not extend anything already written.
+
+### Noticing a failure
+
+Cloudflare does not notify on a failed Worker or Cron Trigger — nothing added
+means a failure is silent. Two places carry the evidence:
+
+- The dashboard's **Cron Events** (the last 100 invocations).
+- **Workers Logs** (7-day retention); search for `backup failed`.
+
+For a push notification, ping a dead man's switch such as Healthchecks.io
+from the end of the handler. That is also the only way to catch the case
+where the cron never fired at all.
+
+### Checking locally
+
+`wrangler dev` exposes a route that triggers `scheduled`:
+
+```sh
+curl "http://localhost:8787/cdn-cgi/handler/scheduled"
+```
+
+A local run writes under the `dev-backups/` prefix, so it never mixes with
+production backups. The export API still targets the remote production
+database regardless, which is why `.dev.vars`'s `D1_EXPORT_API_TOKEN` is
+empty by default.
+
+### Restore
+
+```sh
+pnpm exec wrangler r2 object get kept-backups/backups/2026-08-31.sql --remote --file=restore.sql
+pnpm exec wrangler d1 execute kept-db --remote --file=restore.sql
+```
+
+Separately, D1 has Time Travel enabled at all times (30 days on paid plans, 7
+on the free plan): `wrangler d1 time-travel restore` can roll the database
+back to any point within that window. That restore is destructive and leaves
+no copy behind, unlike restoring from an R2 backup, so treat the two as
+complementary rather than interchangeable.
+
 ## Limits
 
 - A note's title is capped at 1000 characters and its body at 512 KB, to stay

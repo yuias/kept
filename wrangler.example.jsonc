@@ -25,10 +25,21 @@
     // straight from static assets (with SPA fallback to index.html).
     "run_worker_first": ["/api/*", "/raw/*", "/img/*"]
   },
+  // Weekly backup, JST 06:00 on Monday. Cron Triggers are evaluated in UTC, so
+  // the weekday here is the day before the one the schedule reads as locally.
+  // Cloudflare numbers weekdays 1 = Sunday through 7 = Saturday, which is off
+  // by one from most cron systems; the abbreviation sidesteps the ambiguity.
+  "triggers": {
+    "crons": ["0 21 * * SUN"]
+  },
   "r2_buckets": [
     {
       "binding": "IMAGES",
       "bucket_name": "kept-images"
+    },
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "kept-backups"
     }
   ],
   "d1_databases": [
@@ -41,9 +52,26 @@
       "migrations_dir": "migrations"
     }
   ],
+  "vars": {
+    // How long a backup written from now on is kept. The expiry is stamped onto
+    // each object as it is written, so changing this never affects backups that
+    // already exist — in either direction.
+    "BACKUP_RETENTION_DAYS": 56,
+    // FILL IN: the account the database lives in. The export API is reached
+    // over HTTP, which the D1 binding does not expose, so the ids have to be
+    // repeated here.
+    "CLOUDFLARE_ACCOUNT_ID": "00000000000000000000000000000000",
+    // FILL IN: must match `d1_databases[0].database_id` above.
+    "D1_DATABASE_ID": "00000000-0000-0000-0000-000000000000"
+  },
   // Declared by name only. Values live in `.dev.vars` locally and are set with
   // `wrangler secret put` for deployments.
   "secrets": {
-    "required": ["ACCESS_TEAM_DOMAIN", "ACCESS_POLICY_AUD", "ALLOWED_EMAILS"]
+    "required": [
+      "ACCESS_TEAM_DOMAIN",
+      "ACCESS_POLICY_AUD",
+      "ALLOWED_EMAILS",
+      "D1_EXPORT_API_TOKEN"
+    ]
   }
 }
