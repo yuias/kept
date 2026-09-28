@@ -33,8 +33,19 @@ export const en = {
     settings: 'Settings',
   },
   app: {
-    settingsComingSoon: 'Settings are coming soon.',
     notFound: 'Page not found.',
+  },
+  settings: {
+    title: 'Settings',
+    defaultFormat: 'Default note format',
+    folderSort: 'Folder sort order',
+    sortName: 'Name',
+    sortCreated: 'Created',
+    sortUpdated: 'Updated',
+    sortManual: 'Manual',
+    language: 'Language',
+    languageAuto: 'Auto',
+    saved: 'Saved',
   },
   notes: {
     pinned: 'Pinned',

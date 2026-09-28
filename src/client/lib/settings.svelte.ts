@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/types'
-import { fetchSettings } from './api'
+import { fetchSettings, updateSettings as putSettings } from './api'
 
 const state = $state<{ settings: AppSettings; loaded: boolean }>({
   settings: { ...DEFAULT_SETTINGS },
@@ -22,4 +22,11 @@ export const settingsReady: Promise<void> = load()
 
 export function settings(): AppSettings {
   return state.settings
+}
+
+/** PUTs the patch and, on success, updates the store from the server's response. */
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const updated = await putSettings(patch)
+  state.settings = updated
+  return updated
 }

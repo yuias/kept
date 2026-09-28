@@ -26,8 +26,19 @@ export const ja: Messages = {
     settings: '設定',
   },
   app: {
-    settingsComingSoon: '設定機能は近日公開予定です。',
     notFound: 'ページが見つかりませんでした。',
+  },
+  settings: {
+    title: '設定',
+    defaultFormat: 'ノートの既定の表示形式',
+    folderSort: 'フォルダの並び順',
+    sortName: '名前',
+    sortCreated: '作成日',
+    sortUpdated: '更新日',
+    sortManual: '手動',
+    language: '言語',
+    languageAuto: '自動',
+    saved: '保存しました',
   },
   notes: {
     pinned: 'ピン留め',
