@@ -1,11 +1,19 @@
 <script lang="ts">
   import { messages } from '../lib/i18n.svelte'
+  import { currentRoute, navigate, openNote } from '../lib/router.svelte'
+  import { listQueryFor } from '../lib/routes'
   import { session } from '../lib/session.svelte'
   import ThemeToggle from './ThemeToggle.svelte'
   import { sidebarOpen, toggleSidebar } from '../lib/sidebar.svelte'
 
   const me = $derived(session())
   const m = $derived(messages())
+
+  /** From a route with no note grid (Settings, notfound), open the dialog on the notes list instead. */
+  function handleNewNote(): void {
+    if (listQueryFor(currentRoute())) openNote('new')
+    else navigate('/?note=new')
+  }
 
   /**
    * Cloudflare Access answers both of these itself; neither reaches the Worker,
@@ -30,6 +38,7 @@
   </button>
   <span class="brand">kept</span>
   <div class="top-bar-slot"></div>
+  <button type="button" onclick={handleNewNote}>{m.editor.newNote}</button>
   <ThemeToggle />
   {#if me.loaded}
     <span class="identity" class:stale={me.me.stale}>

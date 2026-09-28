@@ -1,16 +1,26 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { NoteSummary } from '../../shared/types'
+  import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
   import { emptyTrash as emptyTrashRequest, listNotes } from '../lib/api'
   import { describeApiError } from '../lib/errors'
   import { messages } from '../lib/i18n.svelte'
-  import type { ListQuery } from '../lib/routes'
-  import { openNote } from '../lib/router.svelte'
+  import { currentRoute, openNote } from '../lib/router.svelte'
+  import { noteParam, type ListQuery } from '../lib/routes'
 
   let { query }: { query: ListQuery } = $props()
 
   const m = $derived(messages())
+
+  // `routes.ts` has no notion of the `note` query param; re-reading location
+  // whenever the router touches history (including note-only changes, which
+  // reassign `state.current` without changing the parsed route) keeps this in
+  // step without needing a reactive export from router.svelte.ts.
+  const noteId = $derived.by(() => {
+    currentRoute()
+    return noteParam(window.location.search)
+  })
 
   let items = $state<NoteSummary[]>([])
   let nextCursor = $state<string | null>(null)
@@ -103,6 +113,10 @@
 </script>
 
 <div class="notes-view">
+  {#if query.view === 'notes'}
+    <button type="button" class="take-a-note" onclick={() => openNote('new')}>{m.editor.takeANote}</button>
+  {/if}
+
   {#if query.view === 'trash' && items.length > 0}
     <div class="notes-toolbar">
       <button type="button" onclick={handleEmptyTrash}>{m.notes.emptyTrashAction}</button>
@@ -137,6 +151,10 @@
   {/if}
 </div>
 
+{#if noteId}
+  <NoteEditor id={noteId} onclose={() => openNote(null)} onsettled={load} />
+{/if}
+
 <style>
   .notes-view {
     padding: 20px;
@@ -166,5 +184,13 @@
   .notes-load-more {
     display: flex;
     justify-content: flex-end;
+  }
+
+  .take-a-note {
+    align-self: flex-start;
+    width: min(600px, 100%);
+    justify-content: flex-start;
+    padding: 10px 16px;
+    color: var(--text-muted);
   }
 </style>
