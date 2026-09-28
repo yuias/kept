@@ -119,6 +119,15 @@ export const en = {
     saving: 'Saving…',
     saved: 'Saved',
     close: 'Close',
+    insertImageFromUrl: 'Image from URL…',
+    imageUploading: 'Uploading image…',
+    imageFailed: (message: string) => `Image failed: ${message}`,
+    dismiss: 'Dismiss',
+  },
+  imageUrlDialog: {
+    title: 'Insert image from URL',
+    urlPlaceholder: 'https://example.com/image.png',
+    insert: 'Insert',
   },
   errors: {
     badRequest: 'That request was invalid.',

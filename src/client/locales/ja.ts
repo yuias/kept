@@ -112,6 +112,15 @@ export const ja: Messages = {
     saving: '保存中…',
     saved: '保存しました',
     close: '閉じる',
+    insertImageFromUrl: 'URLから画像を挿入…',
+    imageUploading: '画像をアップロード中…',
+    imageFailed: (message: string) => `画像の処理に失敗しました: ${message}`,
+    dismiss: '閉じる',
+  },
+  imageUrlDialog: {
+    title: 'URLから画像を挿入',
+    urlPlaceholder: 'https://example.com/image.png',
+    insert: '挿入',
   },
   errors: {
     badRequest: 'リクエストが正しくありません。',

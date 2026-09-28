@@ -1,18 +1,21 @@
 <script lang="ts">
-  import { onDestroy, onMount, untrack } from 'svelte'
+  import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { effectiveFormat } from '../../shared/format'
   import { normalizeLabels, parseLabelInput } from '../../shared/labels'
   import { LABEL_MAX_CHARS, LABELS_PER_NOTE_MAX } from '../../shared/limits'
-  import type { ConcreteFormat, NoteFormat, UpdateNoteInput } from '../../shared/types'
+  import type { ConcreteFormat, ImageUploadResponse, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { insertAt, makePlaceholder, replacePlaceholder } from '../lib/image/insert'
+  import { encodeToWebp, importFromUrl, uploadWebp } from '../lib/image/pipeline'
   import { reloadLabels, sameLabelSet } from '../lib/labels.svelte'
   import { openNote } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
+  import ImageUrlDialog from './ImageUrlDialog.svelte'
   import MarkdownView from './MarkdownView.svelte'
 
   // The parent unmounts this component when `?note` is removed, but never
@@ -51,6 +54,21 @@
   let loadError = $state<string | null>(null)
   let status = $state<AutosaveStatus>('idle')
   let saveError = $state<string | null>(null)
+
+  let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
+  let urlDialogOpen = $state(false)
+
+  interface ImageTask {
+    token: string
+    status: 'uploading' | 'error'
+    error?: string
+  }
+  let imageTasks = $state<ImageTask[]>([])
+  // Tracks every in-flight placeholder replacement so the close paths can
+  // wait for them: otherwise a flush could save the body with a placeholder
+  // still in it, and the eventual replacement would land on an unmounted
+  // component with nowhere left to persist it.
+  const inflightImages = new Set<Promise<void>>()
 
   const readOnly = $derived(trashedAt !== null)
   const effective = $derived(effectiveFormat(format, settings()))
@@ -146,6 +164,7 @@
     // going through `close()`/`handleDialogClose`), so this is also where
     // `onsettled` fires to tell the list it can safely reload.
     void (async () => {
+      await Promise.allSettled([...inflightImages])
       await autosave.flush()
       onsettled()
       // Covers every path that changes label counts while this note was
@@ -197,6 +216,105 @@
     }
     if (sameLabelSet(result.labels, savedLabels)) return
     autosave.update({ labels: result.labels })
+  }
+
+  function addImageTask(token: string): void {
+    imageTasks = [...imageTasks, { token, status: 'uploading' }]
+  }
+
+  function failImageTask(token: string, error: string): void {
+    imageTasks = imageTasks.map((task) => (task.token === token ? { ...task, status: 'error', error } : task))
+  }
+
+  function resolveImageTask(token: string): void {
+    imageTasks = imageTasks.filter((task) => task.token !== token)
+  }
+
+  function dismissImageTask(token: string): void {
+    imageTasks = imageTasks.filter((task) => task.token !== token)
+  }
+
+  /**
+   * Applies `newText` to `body` and, when the textarea is mounted, restores
+   * the caret relative to `changeAt`: positions at or after it shift by
+   * `delta` (the length change the edit introduced), positions before it do
+   * not move. This holds for both an insertion at the caret (which then
+   * lands right after the inserted text) and a later placeholder
+   * replacement/removal (which only moves a caret that was inside or past
+   * the placeholder).
+   */
+  async function mutateBody(newText: string, changeAt: number, delta: number): Promise<void> {
+    const el = textareaEl
+    const prevStart = el?.selectionStart ?? null
+    const prevEnd = el?.selectionEnd ?? null
+    body = newText
+    onBodyInput()
+    if (!el || prevStart === null || prevEnd === null) return
+    await tick()
+    const shift = (pos: number): number => (pos >= changeAt ? Math.max(changeAt, pos + delta) : pos)
+    el.setSelectionRange(shift(prevStart), shift(prevEnd))
+  }
+
+  /** Runs `work`, then replaces `token` with the resulting markdown or removes it on failure. */
+  async function runImageTask(token: string, work: () => Promise<ImageUploadResponse>): Promise<void> {
+    const task = (async () => {
+      try {
+        const result = await work()
+        const at = body.indexOf(token)
+        if (at !== -1) {
+          const markdown = `![](${result.url})`
+          await mutateBody(replacePlaceholder(body, token, markdown), at, markdown.length - token.length)
+        }
+        resolveImageTask(token)
+      } catch (cause) {
+        const at = body.indexOf(token)
+        if (at !== -1) await mutateBody(replacePlaceholder(body, token, ''), at, -token.length)
+        failImageTask(token, describeApiError(cause, m))
+      }
+    })()
+    inflightImages.add(task)
+    try {
+      await task
+    } finally {
+      inflightImages.delete(task)
+    }
+  }
+
+  async function encodeAndUploadFile(file: File): Promise<ImageUploadResponse> {
+    const result = await encodeToWebp(file)
+    return uploadWebp(result)
+  }
+
+  async function insertImagePlaceholder(pos: number): Promise<string> {
+    const token = makePlaceholder()
+    await mutateBody(insertAt(body, pos, token), pos, token.length)
+    addImageTask(token)
+    return token
+  }
+
+  async function handlePaste(event: ClipboardEvent): Promise<void> {
+    if (readOnly) return
+    const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'))
+    if (files.length === 0) return
+    event.preventDefault()
+
+    for (const file of files) {
+      const pos = textareaEl?.selectionStart ?? body.length
+      const token = await insertImagePlaceholder(pos)
+      void runImageTask(token, () => encodeAndUploadFile(file))
+    }
+  }
+
+  function openImageUrlDialog(): void {
+    if (readOnly) return
+    urlDialogOpen = true
+  }
+
+  async function handleImageUrlInsert(url: string): Promise<void> {
+    urlDialogOpen = false
+    const pos = textareaEl?.selectionEnd ?? body.length
+    const token = await insertImagePlaceholder(pos)
+    void runImageTask(token, () => importFromUrl(url))
   }
 
   async function togglePinned(): Promise<void> {
@@ -307,6 +425,7 @@
     if (closing) return
     closing = true
     try {
+      await Promise.allSettled([...inflightImages])
       const flushed = await autosave.flush()
       if (flushed) close()
     } finally {
@@ -328,6 +447,7 @@
    * `requestClose` has already drained everything.
    */
   async function handleDialogClose(): Promise<void> {
+    await Promise.allSettled([...inflightImages])
     await autosave.flush()
     onclose()
   }
@@ -376,16 +496,19 @@
             {editingBody ? m.editor.done : m.editor.edit}
           </button>
         {/if}
+        <button type="button" onclick={openImageUrlDialog}>{m.editor.insertImageFromUrl}</button>
       </div>
     {/if}
 
     {#if showTextarea}
       <textarea
+        bind:this={textareaEl}
         class="note-editor-body"
         class:mono={effective === 'syntax'}
         placeholder={m.editor.takeANote}
         bind:value={body}
         oninput={onBodyInput}
+        onpaste={handlePaste}
         readonly={readOnly}
       ></textarea>
     {:else}
@@ -393,6 +516,17 @@
         <MarkdownView source={body} />
       </div>
     {/if}
+
+    {#each imageTasks as task (task.token)}
+      <p class="note-editor-status" class:error={task.status === 'error'}>
+        {task.status === 'uploading' ? m.editor.imageUploading : m.editor.imageFailed(task.error ?? '')}
+        {#if task.status === 'error'}
+          <button type="button" class="note-editor-image-dismiss" onclick={() => dismissImageTask(task.token)}>
+            {m.editor.dismiss}
+          </button>
+        {/if}
+      </p>
+    {/each}
 
     {#if saveError}
       <p class="note-editor-status error">{saveError}</p>
@@ -438,6 +572,10 @@
     onpick={moveNote}
     oncancel={() => (pickingFolder = false)}
   />
+{/if}
+
+{#if urlDialogOpen}
+  <ImageUrlDialog oninsert={handleImageUrlInsert} oncancel={() => (urlDialogOpen = false)} />
 {/if}
 
 <style>
@@ -498,6 +636,11 @@
 
   .note-editor-status.error {
     color: var(--danger);
+  }
+
+  .note-editor-image-dismiss {
+    margin-left: 6px;
+    font-size: 0.8rem;
   }
 
   .note-editor-actions {
