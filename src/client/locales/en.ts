@@ -18,6 +18,10 @@ export const en = {
     dev: 'dev',
     /** Shown when the Worker reports no identity but is not asking to sign in. */
     notSignedIn: 'Not signed in',
+    theme: 'Theme',
+    themeAuto: 'Auto',
+    themeLight: 'Light',
+    themeDark: 'Dark',
   },
   errors: {
     badRequest: 'That request was invalid.',

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { messages } from '../lib/i18n.svelte'
   import { session } from '../lib/session.svelte'
+  import ThemeToggle from './ThemeToggle.svelte'
 
   const me = $derived(session())
   const m = $derived(messages())
@@ -17,6 +18,7 @@
 <header class="top-bar">
   <span class="brand">kept</span>
   <div class="top-bar-slot"></div>
+  <ThemeToggle />
   {#if me.loaded}
     <span class="identity" class:stale={me.me.stale}>
       {#if me.me.authenticated}

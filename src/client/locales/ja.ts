@@ -11,6 +11,10 @@ export const ja: Messages = {
     sessionStale: 'セッション期限切れ',
     dev: 'dev',
     notSignedIn: '未ログイン',
+    theme: 'テーマ',
+    themeAuto: '自動',
+    themeLight: 'ライト',
+    themeDark: 'ダーク',
   },
   errors: {
     badRequest: 'リクエストが正しくありません。',

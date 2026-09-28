@@ -1,0 +1,194 @@
+/*
+ * Every colour carries both schemes via `light-dark()`, which reads the used
+ * `color-scheme`. So the whole palette follows from that one property, and a
+ * manual choice is just a matter of pinning it (see `[data-theme]` below).
+ */
+:root {
+  --bg: light-dark(#f6f7f9, #10141a);
+  --surface: light-dark(#ffffff, #171c24);
+  --surface-muted: light-dark(#f0f2f5, #1e242e);
+  --border: light-dark(#d8dde4, #2c333f);
+  --text: light-dark(#1b2028, #e3e8ef);
+  --text-muted: light-dark(#616b7a, #97a1b0);
+  --accent: light-dark(#0b6bcb, #4da3ff);
+  --accent-contrast: light-dark(#ffffff, #0b1017);
+  --danger: light-dark(#c02b2b, #ff6b6b);
+  --radius: 10px;
+  --sidebar-width: 240px;
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+/* Written by the theme toggle; absent means "follow the OS". */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ---------- layout ---------- */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.top-bar .brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+/* Reserved for the search box; grows to push the toggle and identity right. */
+.top-bar-slot {
+  flex: 1;
+}
+
+.top-bar .identity,
+.top-bar .auth-link {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.top-bar .identity.stale {
+  color: var(--danger);
+}
+
+main {
+  flex: 1;
+  width: 100%;
+}
+
+/* ---------- primitives ---------- */
+
+button,
+.button {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary,
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+input[type='text'],
+input[type='search'],
+textarea,
+select {
+  font: inherit;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+
+/* ---------- card / sidebar / dialog ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+dialog {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
