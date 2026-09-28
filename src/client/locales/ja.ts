@@ -9,6 +9,8 @@ export const ja: Messages = {
     signIn: 'ログイン',
     signOut: 'ログアウト',
     sessionStale: 'セッション期限切れ',
+    dev: 'dev',
+    notSignedIn: '未ログイン',
   },
   errors: {
     badRequest: 'リクエストが正しくありません。',

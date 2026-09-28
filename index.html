@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>kept</title>
+  </head>
+  <body>
+    <script>
+      // Runs before the first paint so a manual theme choice never flashes the
+      // other scheme. Kept in step with src/client/lib/theme.svelte.ts.
+      try {
+        var theme = localStorage.getItem('kept.theme')
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme
+      } catch {}
+    </script>
+    <div id="app"></div>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

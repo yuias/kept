@@ -14,6 +14,10 @@ export const en = {
     signOut: 'Sign out',
     /** Shown instead of Sign in when Access presented a token we refuse. */
     sessionStale: 'Session expired',
+    /** Badge next to the email in local dev, where Access is not in front of the Worker. */
+    dev: 'dev',
+    /** Shown when the Worker reports no identity but is not asking to sign in. */
+    notSignedIn: 'Not signed in',
   },
   errors: {
     badRequest: 'That request was invalid.',
