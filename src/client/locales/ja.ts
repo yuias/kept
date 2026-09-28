@@ -123,6 +123,8 @@ export const ja: Messages = {
     payloadTooLarge: 'サイズが大きすぎます。',
     unsupportedMediaType: 'このファイル形式には対応していません。',
     badGateway: 'アップストリームサーバーが応答しませんでした。',
+    invalidUrl: '有効な画像のURLではありません。',
+    blockedHost: 'そのアドレスは取得できません。',
     internalError: '問題が発生しました。',
     folderNotFound: 'フォルダが見つかりませんでした。',
     folderTooDeep: 'フォルダの階層が深すぎます。',

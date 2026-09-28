@@ -32,6 +32,10 @@ export function describeApiError(error: unknown, messages: Messages): string {
       return messages.errors.unsupportedMediaType
     case 'bad_gateway':
       return messages.errors.badGateway
+    case 'invalid_url':
+      return messages.errors.invalidUrl
+    case 'blocked_host':
+      return messages.errors.blockedHost
     case 'internal_error':
       return messages.errors.internalError
     case 'folder_not_found':

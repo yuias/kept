@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 import { IMAGE_MAX_BYTES, WEBP_MAX_DIMENSION } from '../../shared/limits'
 import type { ImageUploadResponse } from '../../shared/types'
 import { requireIdentity } from '../auth'
+import { readCappedBody } from '../body'
 import { ownerOf, type HonoEnv } from '../http'
 import { generateId, isValidId } from '../id'
 import { isWebp } from '../webp'
@@ -34,40 +35,6 @@ function requireDimension(raw: string | undefined, name: string): number {
   return value
 }
 
-/**
- * Reads the body a chunk at a time and aborts as soon as the running total
- * exceeds `maxBytes`, so an oversized upload with no (or a lying) content-length
- * never sits fully buffered in memory before being rejected.
- */
-async function readCappedBody(request: Request, maxBytes: number): Promise<Uint8Array> {
-  const body = request.body
-  if (!body) return new Uint8Array(0)
-
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    total += value.byteLength
-    if (total > maxBytes) {
-      await reader.cancel()
-      throw new HTTPException(413, { message: 'image is too large' })
-    }
-    chunks.push(value)
-  }
-
-  const merged = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return merged
-}
-
 imagesRoutes.post('/api/images', requireIdentity, async (c) => {
   checkContentLength(c.req.raw)
 
@@ -83,7 +50,7 @@ imagesRoutes.post('/api/images', requireIdentity, async (c) => {
   // The content-length header may be absent or wrong: streaming the body and
   // capping the running total is the only check that can be trusted, and it
   // also avoids buffering an oversized body in full before rejecting it.
-  const bytes = await readCappedBody(c.req.raw, IMAGE_MAX_BYTES)
+  const bytes = await readCappedBody(c.req.raw.body, IMAGE_MAX_BYTES, 'image is too large')
   if (!isWebp(bytes)) {
     throw new HTTPException(415, { message: 'body is not a valid WebP image' })
   }

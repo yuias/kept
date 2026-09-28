@@ -130,6 +130,8 @@ export const en = {
     payloadTooLarge: 'That is too large.',
     unsupportedMediaType: 'That file type is not supported.',
     badGateway: 'The upstream server did not respond.',
+    invalidUrl: 'That is not a valid image URL.',
+    blockedHost: 'That address cannot be fetched.',
     internalError: 'Something went wrong.',
     folderNotFound: 'That folder could not be found.',
     folderTooDeep: 'That folder is nested too deeply.',
