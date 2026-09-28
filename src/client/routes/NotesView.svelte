@@ -120,6 +120,8 @@
 <div class="notes-view">
   {#if currentFolder}
     <h1 class="notes-view-title">{currentFolder.name}</h1>
+  {:else if query.view === 'all'}
+    <h1 class="notes-view-title">{m.search.resultsFor(query.q ?? '')}</h1>
   {/if}
 
   {#if query.view === 'notes'}

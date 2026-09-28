@@ -70,6 +70,17 @@ export const en = {
     languageAuto: 'Auto',
     saved: 'Saved',
   },
+  search: {
+    placeholder: 'Search',
+    ariaLabel: 'Search notes',
+    helpLabel: 'Search syntax help',
+    helpIntro: 'Combine words, phrases, OR, and label filters:',
+    helpWords: 'word1 word2 — notes matching every word',
+    helpPhrase: '"exact phrase" — matches the phrase verbatim',
+    helpOr: 'word1 OR word2 — matches either word',
+    helpLabelFilter: 'label:name — only notes with that label',
+    resultsFor: (q: string) => `Results for "${q}"`,
+  },
   notes: {
     pinned: 'Pinned',
     others: 'Others',

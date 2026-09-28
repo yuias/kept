@@ -63,6 +63,17 @@ export const ja: Messages = {
     languageAuto: '自動',
     saved: '保存しました',
   },
+  search: {
+    placeholder: '検索',
+    ariaLabel: 'ノートを検索',
+    helpLabel: '検索構文のヘルプ',
+    helpIntro: '単語、フレーズ、OR、ラベル絞り込みを組み合わせられます。',
+    helpWords: 'word1 word2 — すべての単語に一致するノート',
+    helpPhrase: '"完全な語句" — フレーズをそのまま検索',
+    helpOr: 'word1 OR word2 — いずれかの単語に一致',
+    helpLabelFilter: 'label:名前 — そのラベルが付いたノートのみ',
+    resultsFor: (q: string) => `「${q}」の検索結果`,
+  },
   notes: {
     pinned: 'ピン留め',
     others: 'その他',

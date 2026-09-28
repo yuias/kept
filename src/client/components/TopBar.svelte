@@ -3,6 +3,7 @@
   import { currentRoute, navigate, openNote } from '../lib/router.svelte'
   import { listQueryFor } from '../lib/routes'
   import { session } from '../lib/session.svelte'
+  import SearchBox from './SearchBox.svelte'
   import ThemeToggle from './ThemeToggle.svelte'
   import { sidebarOpen, toggleSidebar } from '../lib/sidebar.svelte'
 
@@ -37,7 +38,9 @@
     </svg>
   </button>
   <span class="brand">kept</span>
-  <div class="top-bar-slot"></div>
+  <div class="top-bar-slot">
+    <SearchBox />
+  </div>
   <button type="button" onclick={handleNewNote}>{m.editor.newNote}</button>
   <ThemeToggle />
   {#if me.loaded}
