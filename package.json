@@ -1,0 +1,41 @@
+{
+  "name": "kept",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "cf-typegen": "wrangler types -c wrangler.example.jsonc",
+    "check": "pnpm cf-typegen && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.worker.json",
+    "test": "vitest run",
+    "db:migrate": "wrangler d1 migrations apply kept-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply kept-db --remote"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.13",
+    "hono": "^4.13.1",
+    "jose": "^6.2.8",
+    "marked": "^18.0.9",
+    "shiki": "^4.4.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.51.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^26.6.3",
+    "svelte": "^5.56.8",
+    "svelte-check": "^4.7.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.1",
+    "vitest": "^5.0.2",
+    "wrangler": "^4.120.0"
+  }
+}
