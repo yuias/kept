@@ -34,6 +34,10 @@ export function describeApiError(error: unknown, messages: Messages): string {
       return messages.errors.internalError
     case 'folder_not_found':
       return messages.errors.folderNotFound
+    case 'folder_too_deep':
+      return messages.errors.folderTooDeep
+    case 'folder_cycle':
+      return messages.errors.folderCycle
     case 'format_locked':
       return messages.errors.formatLocked
     case 'note_trashed':

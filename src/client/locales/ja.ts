@@ -25,6 +25,14 @@ export const ja: Messages = {
     trash: 'ゴミ箱',
     settings: '設定',
   },
+  folders: {
+    newFolder: '新しいフォルダ',
+    newSubfolder: '新しいサブフォルダ',
+    namePrompt: 'フォルダ名',
+    empty: 'フォルダはまだありません。',
+    expand: 'フォルダを展開',
+    collapse: 'フォルダを折りたたむ',
+  },
   app: {
     notFound: 'ページが見つかりませんでした。',
   },
@@ -86,6 +94,8 @@ export const ja: Messages = {
     badGateway: 'アップストリームサーバーが応答しませんでした。',
     internalError: '問題が発生しました。',
     folderNotFound: 'フォルダが見つかりませんでした。',
+    folderTooDeep: 'フォルダの階層が深すぎます。',
+    folderCycle: 'フォルダを自分自身やそのサブフォルダの中に移動することはできません。',
     formatLocked: 'このノートの表示形式は固定済みで、自動に戻すことはできません。',
     noteTrashed: 'このノートはゴミ箱に入っているため編集できません。',
     noteNotTrashed: '完全に削除する前に、ゴミ箱に移動してください。',

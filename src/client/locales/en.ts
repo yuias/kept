@@ -32,6 +32,14 @@ export const en = {
     trash: 'Trash',
     settings: 'Settings',
   },
+  folders: {
+    newFolder: 'New folder',
+    newSubfolder: 'New subfolder',
+    namePrompt: 'Folder name',
+    empty: 'No folders yet.',
+    expand: 'Expand folder',
+    collapse: 'Collapse folder',
+  },
   app: {
     notFound: 'Page not found.',
   },
@@ -93,6 +101,8 @@ export const en = {
     badGateway: 'The upstream server did not respond.',
     internalError: 'Something went wrong.',
     folderNotFound: 'That folder could not be found.',
+    folderTooDeep: 'That folder is nested too deeply.',
+    folderCycle: 'A folder cannot move into itself or one of its subfolders.',
     formatLocked: 'This note already has a fixed format and cannot go back to automatic.',
     noteTrashed: 'This note is in the trash and cannot be edited.',
     noteNotTrashed: 'Move this note to the trash before deleting it forever.',

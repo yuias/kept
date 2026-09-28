@@ -1,4 +1,14 @@
-import type { AppSettings, CreateNoteInput, MeResponse, Note, NoteListResponse, UpdateNoteInput } from '../../shared/types'
+import type {
+  AppSettings,
+  CreateFolderInput,
+  CreateNoteInput,
+  Folder,
+  MeResponse,
+  Note,
+  NoteListResponse,
+  UpdateFolderInput,
+  UpdateNoteInput,
+} from '../../shared/types'
 import type { ListQuery } from './routes'
 
 /** Thrown by `request` for every non-2xx response, plus a few client-side conditions. */
@@ -103,6 +113,22 @@ export function deleteNoteForever(id: string): Promise<void> {
 
 export function emptyTrash(): Promise<void> {
   return request<void>('/api/trash', { method: 'DELETE' })
+}
+
+export function listFolders(): Promise<Folder[]> {
+  return request<Folder[]>('/api/folders')
+}
+
+export function createFolder(input: CreateFolderInput): Promise<Folder> {
+  return request<Folder>('/api/folders', withJsonBody('POST', input))
+}
+
+export function updateFolder(id: string, input: UpdateFolderInput): Promise<Folder> {
+  return request<Folder>(`/api/folders/${id}`, withJsonBody('PATCH', input))
+}
+
+export function deleteFolder(id: string): Promise<void> {
+  return request<void>(`/api/folders/${id}`, { method: 'DELETE' })
 }
 
 export function fetchSettings(): Promise<AppSettings> {

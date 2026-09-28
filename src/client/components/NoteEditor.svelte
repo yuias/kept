@@ -14,8 +14,15 @@
   // remounts it in place: the only change to `id` this instance ever sees is
   // `new` turning into a real id, and this component drives that itself
   // (`noteId`, below). So reading the prop once here is deliberate.
-  const { id, onclose, onsettled }: { id: string; onclose: () => void; onsettled: () => void } = $props()
+  const {
+    id,
+    folderId = null,
+    onclose,
+    onsettled,
+  }: { id: string; folderId?: string | null; onclose: () => void; onsettled: () => void } = $props()
   const initialId = untrack(() => id)
+  // Only relevant to a brand-new note: once created, the note keeps its own folder.
+  const initialFolderId = untrack(() => folderId)
 
   const m = $derived(messages())
 
@@ -67,7 +74,7 @@
       if (!creating && !hasContent()) return false
       creating = true
       try {
-        const created = await createNote({ title, body })
+        const created = await createNote({ title, body, folderId: initialFolderId })
         noteId = created.id
         format = created.format
         trashedAt = created.trashedAt

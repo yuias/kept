@@ -232,6 +232,42 @@ button:focus-visible,
   color: var(--text-muted);
 }
 
+.sidebar-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 4px 2px;
+}
+
+.sidebar-heading-row .sidebar-heading {
+  margin: 0;
+}
+
+.sidebar-heading-action {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.sidebar-heading-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sidebar-empty {
+  margin: 2px 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.sidebar-error {
+  margin: 2px 10px;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
 dialog {
   padding: 0;
   border: 1px solid var(--border);

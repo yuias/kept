@@ -5,6 +5,7 @@
   import NoteGrid from '../components/NoteGrid.svelte'
   import { emptyTrash as emptyTrashRequest, listNotes } from '../lib/api'
   import { describeApiError } from '../lib/errors'
+  import { folderById } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { currentRoute, openNote } from '../lib/router.svelte'
   import { noteParam, type ListQuery } from '../lib/routes'
@@ -95,6 +96,8 @@
     }
   }
 
+  const currentFolder = $derived(query.folder ? folderById(query.folder) : undefined)
+
   const pinned = $derived(query.view === 'notes' ? items.filter((n) => n.pinned) : [])
   const others = $derived(query.view === 'notes' ? items.filter((n) => !n.pinned) : items)
 
@@ -113,6 +116,10 @@
 </script>
 
 <div class="notes-view">
+  {#if currentFolder}
+    <h1 class="notes-view-title">{currentFolder.name}</h1>
+  {/if}
+
   {#if query.view === 'notes'}
     <button type="button" class="take-a-note" onclick={() => openNote('new')}>{m.editor.takeANote}</button>
   {/if}
@@ -152,7 +159,7 @@
 </div>
 
 {#if noteId}
-  <NoteEditor id={noteId} onclose={() => openNote(null)} onsettled={load} />
+  <NoteEditor id={noteId} folderId={query.folder ?? null} onclose={() => openNote(null)} onsettled={load} />
 {/if}
 
 <style>
@@ -161,6 +168,10 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .notes-view-title {
+    margin: 0;
   }
 
   .notes-heading {
