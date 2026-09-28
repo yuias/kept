@@ -1,8 +1,9 @@
 import { HTTPException } from 'hono/http-exception'
 import { isNoteFormat } from '../shared/format'
+import { normalizeLabels, sortLabelsCaseInsensitive } from '../shared/labels'
 import { BODY_MAX_BYTES, PREVIEW_CHARS, TITLE_MAX_CHARS } from '../shared/limits'
 import { markdownToPlain } from '../shared/plaintext'
-import type { CreateNoteInput, Note, NoteFormat, NoteSummary, NoteView, UpdateNoteInput } from '../shared/types'
+import type { CreateNoteInput, LabelCount, Note, NoteFormat, NoteSummary, NoteView, UpdateNoteInput } from '../shared/types'
 import { ApiException } from './http'
 import { generateId } from './id'
 
@@ -19,6 +20,7 @@ interface NoteRow {
   trashed_at: number | null
   created_at: number
   updated_at: number
+  labels_json: string | null
 }
 
 interface NoteListRow {
@@ -32,7 +34,20 @@ interface NoteListRow {
   created_at: number
   updated_at: number
   preview: string
+  labels_json: string | null
 }
+
+/** The correlated labels subquery returns a JSON array of names; order is not guaranteed by SQL. */
+function parseLabelsJson(json: string | null): string[] {
+  return sortLabelsCaseInsensitive(json ? (JSON.parse(json) as string[]) : [])
+}
+
+// `labels.owner = ?` inside the subquery is what stops a `note_labels` row
+// from ever surfacing another owner's label: the FK on `note_labels` only
+// references `labels(id)`, not `(owner, id)`.
+const LABELS_JSON_SUBQUERY =
+  `(SELECT json_group_array(l.name) FROM note_labels nl ` +
+  `JOIN labels l ON l.id = nl.label_id AND l.owner = ? WHERE nl.note_id = n.id) AS labels_json`
 
 function toNote(row: NoteRow): Note {
   return {
@@ -42,7 +57,7 @@ function toNote(row: NoteRow): Note {
     summary: row.summary,
     format: row.format,
     folderId: row.folder_id,
-    labels: [], // labels are not stored yet
+    labels: parseLabelsJson(row.labels_json),
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     trashedAt: row.trashed_at,
@@ -58,7 +73,7 @@ function toNoteSummary(row: NoteListRow): NoteSummary {
     preview: row.preview,
     format: row.format,
     folderId: row.folder_id,
-    labels: [], // labels are not stored yet
+    labels: parseLabelsJson(row.labels_json),
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     trashedAt: row.trashed_at,
@@ -96,8 +111,35 @@ async function requireOwnedFolder(db: D1Database, owner: string, folderId: strin
 }
 
 export async function getNote(db: D1Database, owner: string, id: string): Promise<Note | null> {
-  const row = await db.prepare('SELECT * FROM notes WHERE id = ? AND owner = ?').bind(id, owner).first<NoteRow>()
+  const row = await db
+    .prepare(`SELECT n.*, ${LABELS_JSON_SUBQUERY} FROM notes n WHERE n.id = ? AND n.owner = ?`)
+    .bind(owner, id, owner)
+    .first<NoteRow>()
   return row ? toNote(row) : null
+}
+
+function requireNormalizedLabels(labels: string[]): string[] {
+  const result = normalizeLabels(labels)
+  if (!result.ok) throw new HTTPException(400, { message: result.error })
+  return result.labels
+}
+
+/** One `INSERT OR IGNORE` per label, owner-scoped via the unique index, not a WHERE filter. */
+function insertOrIgnoreLabelStatements(db: D1Database, owner: string, labels: string[], now: number): D1PreparedStatement[] {
+  return labels.map((label) =>
+    db.prepare('INSERT OR IGNORE INTO labels (id, owner, name, created_at) VALUES (?, ?, ?, ?)').bind(generateId(), owner, label, now),
+  )
+}
+
+/** Attaches each label to the note; `owner = ?` is what stops this from attaching another owner's same-named label. */
+function insertNoteLabelStatements(db: D1Database, owner: string, noteId: string, labels: string[]): D1PreparedStatement[] {
+  return labels.map((label) =>
+    db.prepare('INSERT INTO note_labels SELECT ?, id FROM labels WHERE owner = ? AND name = ? COLLATE NOCASE').bind(noteId, owner, label),
+  )
+}
+
+function deleteOrphanLabelsStatement(db: D1Database, owner: string): D1PreparedStatement {
+  return db.prepare('DELETE FROM labels WHERE owner = ? AND NOT EXISTS (SELECT 1 FROM note_labels WHERE label_id = labels.id)').bind(owner)
 }
 
 export async function createNote(db: D1Database, owner: string, input: CreateNoteInput): Promise<Note> {
@@ -112,32 +154,50 @@ export async function createNote(db: D1Database, owner: string, input: CreateNot
     folderId = input.folderId
   }
 
+  const labels = input.labels !== undefined ? requireNormalizedLabels(input.labels) : []
+
   const id = generateId()
   const now = Date.now()
   const bodyPlain = markdownToPlain(body)
 
-  await db
+  const insertNote = db
     .prepare(
       `INSERT INTO notes (id, owner, folder_id, title, body, body_plain, format, pinned, archived, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'inherit', 0, 0, ?, ?)`,
     )
     .bind(id, owner, folderId, title, body, bodyPlain, now, now)
-    .run()
 
-  return {
-    id,
-    title,
-    body,
-    summary: null,
-    format: 'inherit',
-    folderId,
-    labels: [],
-    pinned: false,
-    archived: false,
-    trashedAt: null,
-    createdAt: now,
-    updatedAt: now,
+  if (labels.length === 0) {
+    await insertNote.run()
+    return {
+      id,
+      title,
+      body,
+      summary: null,
+      format: 'inherit',
+      folderId,
+      labels: [],
+      pinned: false,
+      archived: false,
+      trashedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
   }
+
+  // Nothing is detached by a create, so there is no orphan cleanup here.
+  await db.batch([
+    insertNote,
+    ...insertOrIgnoreLabelStatements(db, owner, labels, now),
+    ...insertNoteLabelStatements(db, owner, id, labels),
+  ])
+
+  // Re-read rather than echo `labels` back: a label may have matched an
+  // existing case-insensitive spelling (e.g. input 'work' reusing a stored
+  // 'Work'), and the response must report the spelling that is now stored.
+  const note = await getNote(db, owner, id)
+  if (!note) throw new Error('note vanished immediately after being created')
+  return note
 }
 
 export async function updateNote(
@@ -167,6 +227,8 @@ export async function updateNote(
     await requireOwnedFolder(db, owner, input.folderId)
   }
 
+  const normalizedLabels = input.labels !== undefined ? requireNormalizedLabels(input.labels) : undefined
+
   const setClauses: string[] = []
   const setBindings: unknown[] = []
   let contentChanged = false
@@ -184,6 +246,11 @@ export async function updateNote(
   if (input.folderId !== undefined) {
     setClauses.push('folder_id = ?')
     setBindings.push(input.folderId)
+    contentChanged = true
+  }
+  // Labels live in a separate table, so there is no SET clause here, but a
+  // label change still bumps `updated_at` like every other content change.
+  if (normalizedLabels !== undefined) {
     contentChanged = true
   }
 
@@ -243,7 +310,12 @@ export async function updateNote(
   }
 
   // A trashed note is read-only via PATCH, whatever fields are being set, so
-  // this is enforced live in the WHERE too, alongside the format lock.
+  // this is enforced live in the WHERE too, alongside the format lock. The
+  // same predicate is reused, unchanged, inside the label statements below:
+  // it isn't touched by this UPDATE (trashed_at never changes here, and a
+  // format change that passed the guard trivially still passes it read back),
+  // so re-checking it live tells the label writes apart exactly the same way
+  // this UPDATE's own WHERE tells success apart from a 409.
   let where = 'id = ? AND owner = ? AND trashed_at IS NULL'
   const whereBindings: unknown[] = [id, owner]
   if (formatTarget !== undefined) {
@@ -251,12 +323,36 @@ export async function updateNote(
     whereBindings.push(formatTarget)
   }
 
-  const result = await db
-    .prepare(`UPDATE notes SET ${setClauses.join(', ')} WHERE ${where}`)
-    .bind(...setBindings, ...whereBindings)
-    .run()
+  const noteUpdate = db.prepare(`UPDATE notes SET ${setClauses.join(', ')} WHERE ${where}`).bind(...setBindings, ...whereBindings)
 
-  if ((result.meta.changes ?? 0) === 0) {
+  let changes: number
+  if (normalizedLabels === undefined) {
+    const result = await noteUpdate.run()
+    changes = result.meta.changes ?? 0
+  } else {
+    const guardSql = where
+    const now = Date.now()
+    const results = await db.batch([
+      noteUpdate,
+      // `note_labels` has no owner column, so the `EXISTS` guard below (which
+      // repeats `owner = ?` from the UPDATE's own WHERE) is what stops these
+      // statements from touching another owner's rows, and from applying a
+      // label change that the trashed/format-lock guard above would reject.
+      db.prepare(`DELETE FROM note_labels WHERE note_id = ? AND EXISTS (SELECT 1 FROM notes WHERE ${guardSql})`).bind(id, ...whereBindings),
+      ...insertOrIgnoreLabelStatements(db, owner, normalizedLabels, now),
+      ...normalizedLabels.map((label) =>
+        db
+          .prepare(
+            `INSERT INTO note_labels SELECT ?, id FROM labels WHERE owner = ? AND name = ? COLLATE NOCASE AND EXISTS (SELECT 1 FROM notes WHERE ${guardSql})`,
+          )
+          .bind(id, owner, label, ...whereBindings),
+      ),
+      deleteOrphanLabelsStatement(db, owner),
+    ])
+    changes = results[0]?.meta.changes ?? 0
+  }
+
+  if (changes === 0) {
     // The UPDATE's WHERE is what actually enforced the invariants; this
     // follow-up read only classifies which one failed, for the error code.
     const row = await db
@@ -305,15 +401,21 @@ export async function deleteNoteForever(db: D1Database, owner: string, id: strin
   const exists = await db.prepare('SELECT 1 FROM notes WHERE id = ? AND owner = ?').bind(id, owner).first()
   if (!exists) return 'not_found'
 
-  const result = await db
-    .prepare('DELETE FROM notes WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL')
-    .bind(id, owner)
-    .run()
-  return (result.meta.changes ?? 0) > 0 ? 'deleted' : 'not_trashed'
+  // The delete cascades `note_labels` rows via the FK, which can leave labels
+  // with no note_labels left; both statements run in one transaction so a
+  // permanent delete and its orphan cleanup are never observed half-done.
+  const results = await db.batch([
+    db.prepare('DELETE FROM notes WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL').bind(id, owner),
+    deleteOrphanLabelsStatement(db, owner),
+  ])
+  return (results[0]?.meta.changes ?? 0) > 0 ? 'deleted' : 'not_trashed'
 }
 
 export async function emptyTrash(db: D1Database, owner: string): Promise<void> {
-  await db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL').bind(owner).run()
+  await db.batch([
+    db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL').bind(owner),
+    deleteOrphanLabelsStatement(db, owner),
+  ])
 }
 
 function viewWhere(view: NoteView): string {
@@ -346,6 +448,8 @@ export interface ListNotesOptions {
   view: NoteView
   /** `undefined` = no folder filter; `null` = root (`folder_id IS NULL`); otherwise a specific folder id. */
   folderId?: string | null
+  /** `undefined` = no label filter; matched case-insensitively. */
+  label?: string
   cursor: string | null
   limit: number
 }
@@ -356,14 +460,28 @@ export interface ListNotesResult {
 }
 
 export async function listNotes(db: D1Database, owner: string, options: ListNotesOptions): Promise<ListNotesResult> {
-  const conditions = ['owner = ?', viewWhere(options.view)]
+  // The subquery's `?` (bound with `owner` below) is the first placeholder in
+  // the SQL text, since it sits in the SELECT list, ahead of every WHERE
+  // condition, so it must be the first value bound too.
   const bindings: unknown[] = [owner]
+
+  const conditions = ['owner = ?', viewWhere(options.view)]
+  bindings.push(owner)
 
   if (options.folderId === null) {
     conditions.push('folder_id IS NULL')
   } else if (options.folderId !== undefined) {
     conditions.push('folder_id = ?')
     bindings.push(options.folderId)
+  }
+
+  if (options.label !== undefined) {
+    // `l.owner = ?` is what stops this from matching another owner's
+    // same-named label, since `note_labels` has no owner column of its own.
+    conditions.push(
+      'EXISTS (SELECT 1 FROM note_labels nl JOIN labels l ON l.id = nl.label_id WHERE nl.note_id = n.id AND l.owner = ? AND l.name = ? COLLATE NOCASE)',
+    )
+    bindings.push(owner, options.label)
   }
 
   if (options.cursor) {
@@ -379,8 +497,9 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
   bindings.push(options.limit + 1)
 
   const sql = `SELECT id, folder_id, title, format, pinned, archived, trashed_at, created_at, updated_at,
-      substr(body_plain, 1, ${PREVIEW_CHARS}) AS preview
-    FROM notes
+      substr(body_plain, 1, ${PREVIEW_CHARS}) AS preview,
+      ${LABELS_JSON_SUBQUERY}
+    FROM notes n
     WHERE ${conditions.join(' AND ')}
     ORDER BY pinned DESC, updated_at DESC, id DESC
     LIMIT ?`
@@ -399,4 +518,21 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
     items: page.map(toNoteSummary),
     nextCursor: hasMore && last ? `${last.pinned}.${last.updated_at}.${last.id}` : null,
   }
+}
+
+/** Counts each label's non-trashed notes, ordered by name case-insensitively. */
+export async function listLabels(db: D1Database, owner: string): Promise<LabelCount[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT l.name AS name, COUNT(*) AS count
+       FROM labels l
+       JOIN note_labels nl ON nl.label_id = l.id
+       JOIN notes n ON n.id = nl.note_id AND n.owner = ?
+       WHERE l.owner = ? AND n.trashed_at IS NULL
+       GROUP BY l.id, l.name
+       ORDER BY l.name COLLATE NOCASE`,
+    )
+    .bind(owner, owner)
+    .all<LabelCount>()
+  return results ?? []
 }

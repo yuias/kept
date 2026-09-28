@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
+import { collapseLabelWhitespace } from '../../shared/labels'
 import { BODY_MAX_BYTES, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '../../shared/limits'
-import type { CreateNoteInput, Note, NoteFormat, NoteListResponse, NoteView, UpdateNoteInput } from '../../shared/types'
+import type { CreateNoteInput, LabelCount, Note, NoteFormat, NoteListResponse, NoteView, UpdateNoteInput } from '../../shared/types'
 import { requireIdentity } from '../auth'
 import { ApiException, ownerOf, readJson, type HonoEnv } from '../http'
 import { isValidId } from '../id'
@@ -10,6 +11,7 @@ import {
   deleteNoteForever,
   emptyTrash,
   getNote,
+  listLabels,
   listNotes,
   restoreNote,
   trashNote,
@@ -75,6 +77,15 @@ function requireOptionalBoolean(raw: Record<string, unknown>, key: string): bool
   return raw[key] as boolean
 }
 
+function requireOptionalStringArray(raw: Record<string, unknown>, key: string): string[] | undefined {
+  if (!(key in raw)) return undefined
+  const value = raw[key]
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    throw new HTTPException(400, { message: `${key} must be an array of strings` })
+  }
+  return value as string[]
+}
+
 function toCreateInput(raw: Record<string, unknown>): CreateNoteInput {
   const input: CreateNoteInput = {}
   const title = requireOptionalString(raw, 'title')
@@ -83,6 +94,8 @@ function toCreateInput(raw: Record<string, unknown>): CreateNoteInput {
   if (body !== undefined) input.body = body
   const folderId = requireOptionalNullableString(raw, 'folderId')
   if (folderId !== undefined) input.folderId = folderId
+  const labels = requireOptionalStringArray(raw, 'labels')
+  if (labels !== undefined) input.labels = labels
   return input
 }
 
@@ -98,6 +111,8 @@ function toUpdateInput(raw: Record<string, unknown>): UpdateNoteInput {
   if (format !== undefined) input.format = format as NoteFormat
   const folderId = requireOptionalNullableString(raw, 'folderId')
   if (folderId !== undefined) input.folderId = folderId
+  const labels = requireOptionalStringArray(raw, 'labels')
+  if (labels !== undefined) input.labels = labels
   const pinned = requireOptionalBoolean(raw, 'pinned')
   if (pinned !== undefined) input.pinned = pinned
   const archived = requireOptionalBoolean(raw, 'archived')
@@ -115,15 +130,28 @@ notesRoutes.get('/api/notes', requireIdentity, async (c) => {
   const folderParam = url.searchParams.get('folder')
   const folderId = folderParam === null ? undefined : folderParam === 'root' ? null : folderParam
 
+  // Normalized the same way a stored label name is, so trailing/inner
+  // whitespace in the query string doesn't silently fail to match; an empty
+  // result (e.g. `label=` or `label=%20`) is treated as no filter at all.
+  const labelParam = url.searchParams.get('label')
+  const label = labelParam === null ? undefined : collapseLabelWhitespace(labelParam) || undefined
+
   const result = await listNotes(c.env.DB, owner, {
     view,
     folderId,
+    label,
     cursor: url.searchParams.get('cursor'),
     limit: parseLimit(url.searchParams.get('limit')),
   })
 
   const body: NoteListResponse = result
   return c.json(body)
+})
+
+notesRoutes.get('/api/labels', requireIdentity, async (c) => {
+  const owner = ownerOf(c)
+  const labels = await listLabels(c.env.DB, owner)
+  return c.json(labels satisfies LabelCount[])
 })
 
 notesRoutes.post('/api/notes', requireIdentity, async (c) => {
