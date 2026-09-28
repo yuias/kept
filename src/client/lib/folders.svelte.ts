@@ -1,6 +1,11 @@
-import { buildTree, canCreateUnder, type FolderTreeNode } from '../../shared/folder-tree'
+import { buildTree, canCreateUnder, checkMove, type FolderTreeNode } from '../../shared/folder-tree'
 import type { Folder } from '../../shared/types'
-import { createFolder as createFolderRequest, listFolders as listFoldersRequest } from './api'
+import {
+  createFolder as createFolderRequest,
+  deleteFolder as deleteFolderRequest,
+  listFolders as listFoldersRequest,
+  updateFolder as updateFolderRequest,
+} from './api'
 import { describeApiError } from './errors'
 import { messages } from './i18n.svelte'
 import { settings } from './settings.svelte'
@@ -103,4 +108,46 @@ export async function createFolder(name: string, parentId: string | null): Promi
     state.error = describeApiError(cause, messages())
     return null
   }
+}
+
+export async function renameFolder(id: string, name: string): Promise<Folder | null> {
+  state.error = null
+  try {
+    const folder = await updateFolderRequest(id, { name })
+    await reloadFolders()
+    return folder
+  } catch (cause) {
+    state.error = describeApiError(cause, messages())
+    return null
+  }
+}
+
+export async function moveFolder(id: string, parentId: string | null): Promise<Folder | null> {
+  state.error = null
+  try {
+    const folder = await updateFolderRequest(id, { parentId })
+    await reloadFolders()
+    if (parentId) setFolderExpanded(parentId, true)
+    return folder
+  } catch (cause) {
+    state.error = describeApiError(cause, messages())
+    return null
+  }
+}
+
+export async function removeFolder(id: string): Promise<boolean> {
+  state.error = null
+  try {
+    await deleteFolderRequest(id)
+    await reloadFolders()
+    return true
+  } catch (cause) {
+    state.error = describeApiError(cause, messages())
+    return false
+  }
+}
+
+/** Targets `checkMove` would reject for this folder: itself, its subtree, and anything too deep. */
+export function disabledMoveTargets(id: string): string[] {
+  return state.folders.filter((f) => checkMove(state.folders, id, f.id) !== 'ok').map((f) => f.id)
 }

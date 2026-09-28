@@ -5,9 +5,11 @@
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
   import { describeApiError } from '../lib/errors'
+  import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { openNote } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
+  import FolderPicker from './FolderPicker.svelte'
   import MarkdownView from './MarkdownView.svelte'
 
   // The parent unmounts this component when `?note` is removed, but never
@@ -31,6 +33,8 @@
   let title = $state('')
   let body = $state('')
   let format = $state<NoteFormat>('inherit')
+  let currentFolderId = $state<string | null>(initialFolderId)
+  let pickingFolder = $state(false)
   let pinned = $state(false)
   let archived = $state(false)
   let trashedAt = $state<number | null>(null)
@@ -78,6 +82,7 @@
         noteId = created.id
         format = created.format
         trashedAt = created.trashedAt
+        currentFolderId = created.folderId
         if (open) openNote(created.id, { replace: true })
       } finally {
         creating = false
@@ -137,6 +142,7 @@
       pinned = note.pinned
       archived = note.archived
       trashedAt = note.trashedAt
+      currentFolderId = note.folderId
     } catch (cause) {
       loadError = describeApiError(cause, m)
     } finally {
@@ -180,6 +186,23 @@
       const updated = await updateNote(noteId, { format: next })
       format = updated.format
       editingBody = false
+    } catch (cause) {
+      saveError = describeApiError(cause, m)
+    }
+  }
+
+  // Sent as its own single-field PATCH, flushing pending autosave first for
+  // the same reason `toggleFormat` does: a body PATCH still in flight could
+  // otherwise resolve after this one and overwrite `folderId` with the value
+  // it read before the move committed.
+  async function moveNote(target: string | null): Promise<void> {
+    pickingFolder = false
+    if (!noteId || target === currentFolderId) return
+    const flushed = await autosave.flush()
+    if (!flushed) return
+    try {
+      const updated = await updateNote(noteId, { folderId: target })
+      currentFolderId = updated.folderId
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -342,6 +365,14 @@
         <button type="button" disabled={!noteId} onclick={toggleArchived}>
           {archived ? m.editor.unarchive : m.editor.archive}
         </button>
+        <button
+          type="button"
+          disabled={!noteId}
+          title={currentFolderId ? folderById(currentFolderId)?.name : m.folders.noFolder}
+          onclick={() => (pickingFolder = true)}
+        >
+          {m.editor.moveTo}
+        </button>
         <button type="button" disabled={!noteId} onclick={moveToTrash}>{m.editor.trash}</button>
       {/if}
       <span class="note-editor-spacer"></span>
@@ -349,6 +380,15 @@
     </div>
   {/if}
 </dialog>
+
+{#if pickingFolder}
+  <FolderPicker
+    title={m.editor.moveTo}
+    folders={folders()}
+    onpick={moveNote}
+    oncancel={() => (pickingFolder = false)}
+  />
+{/if}
 
 <style>
   .note-editor {
