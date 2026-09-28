@@ -123,6 +123,8 @@ export const en = {
     imageUploading: 'Uploading image…',
     imageFailed: (message: string) => `Image failed: ${message}`,
     dismiss: 'Dismiss',
+    viewRaw: 'View raw',
+    downloadMarkdown: 'Download .md',
   },
   imageUrlDialog: {
     title: 'Insert image from URL',

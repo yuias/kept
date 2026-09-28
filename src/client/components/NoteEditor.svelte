@@ -391,6 +391,33 @@
     }
   }
 
+  // Flushed first so "View raw"/"Download .md" never race a pending edit:
+  // opening the export before an in-flight autosave lands could show stale
+  // content in the new tab.
+  // The tab is opened before awaiting the flush: popup blockers only allow
+  // window.open during the click's transient activation.
+  async function openRaw(query: string): Promise<void> {
+    if (!noteId) return
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    const flushed = await autosave.flush()
+    if (!flushed) {
+      tab?.close()
+      return
+    }
+    const url = `/raw/${noteId}${query}`
+    if (tab) tab.location.href = url
+    else window.open(url, '_blank', 'noopener')
+  }
+
+  function viewRaw(): Promise<void> {
+    return openRaw('')
+  }
+
+  function downloadRaw(): Promise<void> {
+    return openRaw('?download')
+  }
+
   async function restore(): Promise<void> {
     if (!noteId) return
     try {
@@ -559,6 +586,8 @@
         </button>
         <button type="button" disabled={!noteId} onclick={moveToTrash}>{m.editor.trash}</button>
       {/if}
+      <button type="button" disabled={!noteId} onclick={viewRaw}>{m.editor.viewRaw}</button>
+      <button type="button" disabled={!noteId} onclick={downloadRaw}>{m.editor.downloadMarkdown}</button>
       <span class="note-editor-spacer"></span>
       <button type="button" onclick={requestClose}>{m.editor.close}</button>
     </div>
