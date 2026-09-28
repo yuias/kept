@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { MeResponse } from '../shared/types'
 import { isDevMode, withIdentity } from './auth'
 import { ApiException, type HonoEnv } from './http'
+import { notesRoutes } from './routes/notes'
 
 export const app = new Hono<HonoEnv>()
 
@@ -19,6 +20,8 @@ app.get('/api/me', (c) => {
   }
   return c.json(body)
 })
+
+app.route('/', notesRoutes)
 
 app.notFound((c) => c.json({ error: 'not_found', message: 'no such endpoint' }, 404))
 
