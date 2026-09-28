@@ -2,6 +2,7 @@
   import { messages } from '../lib/i18n.svelte'
   import { session } from '../lib/session.svelte'
   import ThemeToggle from './ThemeToggle.svelte'
+  import { sidebarOpen, toggleSidebar } from '../lib/sidebar.svelte'
 
   const me = $derived(session())
   const m = $derived(messages())
@@ -16,6 +17,17 @@
 </script>
 
 <header class="top-bar">
+  <button
+    class="hamburger"
+    type="button"
+    aria-label={m.nav.toggleSidebar}
+    aria-expanded={sidebarOpen()}
+    onclick={toggleSidebar}
+  >
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M2 4h12M2 8h12M2 12h12" />
+    </svg>
+  </button>
   <span class="brand">kept</span>
   <div class="top-bar-slot"></div>
   <ThemeToggle />

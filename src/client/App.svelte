@@ -1,5 +1,6 @@
 <script lang="ts">
   import TopBar from './components/TopBar.svelte'
+  import Sidebar from './components/Sidebar.svelte'
   import NotesView from './routes/NotesView.svelte'
   import { messages } from './lib/i18n.svelte'
   import { currentRoute } from './lib/router.svelte'
@@ -12,13 +13,16 @@
 
 <div class="app">
   <TopBar />
-  <main>
-    {#if query}
-      <NotesView {query} />
-    {:else if route.name === 'settings'}
-      <p>{m.app.settingsComingSoon}</p>
-    {:else}
-      <p>{m.app.notFound}</p>
-    {/if}
-  </main>
+  <div class="layout">
+    <Sidebar />
+    <main>
+      {#if query}
+        <NotesView {query} />
+      {:else if route.name === 'settings'}
+        <p>{m.app.settingsComingSoon}</p>
+      {:else}
+        <p>{m.app.notFound}</p>
+      {/if}
+    </main>
+  </div>
 </div>

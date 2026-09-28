@@ -22,6 +22,15 @@ export const en = {
     themeAuto: 'Auto',
     themeLight: 'Light',
     themeDark: 'Dark',
+    toggleSidebar: 'Toggle sidebar',
+  },
+  sidebar: {
+    notes: 'Notes',
+    folders: 'Folders',
+    labels: 'Labels',
+    archive: 'Archive',
+    trash: 'Trash',
+    settings: 'Settings',
   },
   app: {
     settingsComingSoon: 'Settings are coming soon.',

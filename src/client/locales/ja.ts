@@ -15,6 +15,15 @@ export const ja: Messages = {
     themeAuto: '自動',
     themeLight: 'ライト',
     themeDark: 'ダーク',
+    toggleSidebar: 'サイドバーの切り替え',
+  },
+  sidebar: {
+    notes: 'ノート',
+    folders: 'フォルダ',
+    labels: 'ラベル',
+    archive: 'アーカイブ',
+    trash: 'ゴミ箱',
+    settings: '設定',
   },
   app: {
     settingsComingSoon: '設定機能は近日公開予定です。',
