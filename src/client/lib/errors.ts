@@ -1,14 +1,19 @@
-import type { ApiErrorBody } from '../../shared/types'
 import type { Messages } from '../locales/en'
+import { ApiError } from './api'
 
 /**
- * Maps a Worker error code to its localized wording. Codes come from the
- * `onError` status mapping in `src/worker/http.ts`; an unrecognised code
- * (a newer Worker than this build knows about) falls back to the message the
- * Worker sent, which is always English but at least specific.
+ * Maps an `ApiError` to its localized wording. Codes come either from the
+ * `onError` status mapping in `src/worker/http.ts`, from a specific
+ * `ApiException` thrown by a route, or from `request()` itself when the
+ * response never reached the Worker (Access redirects, network failures). An
+ * unrecognised code (a newer Worker than this build knows about) falls back
+ * to the message the Worker sent, which is always English but at least
+ * specific.
  */
-export function describeApiError(body: ApiErrorBody, messages: Messages): string {
-  switch (body.error) {
+export function describeApiError(error: unknown, messages: Messages): string {
+  if (!(error instanceof ApiError)) return messages.errors.internalError
+
+  switch (error.code) {
     case 'bad_request':
       return messages.errors.badRequest
     case 'unauthorized':
@@ -27,7 +32,21 @@ export function describeApiError(body: ApiErrorBody, messages: Messages): string
       return messages.errors.badGateway
     case 'internal_error':
       return messages.errors.internalError
+    case 'folder_not_found':
+      return messages.errors.folderNotFound
+    case 'format_locked':
+      return messages.errors.formatLocked
+    case 'note_trashed':
+      return messages.errors.noteTrashed
+    case 'note_not_trashed':
+      return messages.errors.noteNotTrashed
+    case 'network':
+      return messages.errors.network
+    case 'session_expired':
+      return messages.errors.sessionStale
+    case 'unexpected_response':
+      return messages.errors.internalError
     default:
-      return body.message
+      return error.message
   }
 }

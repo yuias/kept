@@ -36,6 +36,19 @@ export const en = {
     settingsComingSoon: 'Settings are coming soon.',
     notFound: 'Page not found.',
   },
+  notes: {
+    pinned: 'Pinned',
+    others: 'Others',
+    pinnedIndicator: 'Pinned',
+    loadMore: 'Load more',
+    loading: 'Loading…',
+    emptyNotes: 'No notes yet.',
+    emptyArchive: 'No archived notes.',
+    emptyTrash: 'Trash is empty.',
+    emptySearch: 'No notes match your search.',
+    emptyTrashAction: 'Empty trash',
+    emptyTrashConfirm: 'Delete every note in the trash permanently? This cannot be undone.',
+  },
   errors: {
     badRequest: 'That request was invalid.',
     unauthorized: 'Sign in to continue.',
@@ -46,6 +59,11 @@ export const en = {
     unsupportedMediaType: 'That file type is not supported.',
     badGateway: 'The upstream server did not respond.',
     internalError: 'Something went wrong.',
+    folderNotFound: 'That folder could not be found.',
+    formatLocked: 'This note already has a fixed format and cannot go back to automatic.',
+    noteTrashed: 'This note is in the trash and cannot be edited.',
+    noteNotTrashed: 'Move this note to the trash before deleting it forever.',
+    network: 'The server could not be reached.',
   },
 }
 
