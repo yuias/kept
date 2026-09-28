@@ -268,6 +268,48 @@ button:focus-visible,
   color: var(--danger);
 }
 
+.sidebar-heading-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-heading-toggle .sidebar-heading {
+  margin: 10px 0 2px;
+}
+
+.folder-toggle-icon {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.label-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.label-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 dialog {
   padding: 0;
   border: 1px solid var(--border);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sortLabelsCaseInsensitive } from '../../shared/labels'
   import type { NoteSummary } from '../../shared/types'
   import { messages } from '../lib/i18n.svelte'
 
@@ -25,6 +26,13 @@
   {#if note.preview}
     <span class="note-preview">{note.preview}</span>
   {/if}
+  {#if note.labels.length > 0}
+    <span class="note-labels">
+      {#each sortLabelsCaseInsensitive(note.labels) as label (label)}
+        <span class="note-label-chip">{label}</span>
+      {/each}
+    </span>
+  {/if}
 </button>
 
 <style>
@@ -50,6 +58,20 @@
   .note-title {
     font-weight: 600;
     color: var(--text);
+  }
+
+  .note-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .note-label-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+    font-size: 0.75rem;
   }
 
   .note-preview {

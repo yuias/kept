@@ -43,6 +43,11 @@ export const ja: Messages = {
     noFolder: 'フォルダなし',
     cancel: 'キャンセル',
   },
+  labels: {
+    expand: 'ラベルを展開',
+    collapse: 'ラベルを折りたたむ',
+    empty: 'ラベルはまだありません。',
+  },
   app: {
     notFound: 'ページが見つかりませんでした。',
   },
@@ -75,6 +80,9 @@ export const ja: Messages = {
     newNote: '新しいノート',
     takeANote: 'メモを入力…',
     titlePlaceholder: 'タイトル',
+    labelsPlaceholder: 'ラベル（カンマ区切り）',
+    labelTooLong: (max: number) => `ラベルは${max}文字以内にしてください。`,
+    tooManyLabels: (max: number) => `ノートに設定できるラベルは最大${max}個です。`,
     formatFormatted: '整形表示',
     formatSyntax: 'シンタックス表示',
     formatDefault: (label: string) => `${label}（デフォルト）`,

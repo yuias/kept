@@ -50,6 +50,11 @@ export const en = {
     noFolder: 'No folder',
     cancel: 'Cancel',
   },
+  labels: {
+    expand: 'Expand labels',
+    collapse: 'Collapse labels',
+    empty: 'No labels yet.',
+  },
   app: {
     notFound: 'Page not found.',
   },
@@ -82,6 +87,9 @@ export const en = {
     newNote: 'New note',
     takeANote: 'Take a note…',
     titlePlaceholder: 'Title',
+    labelsPlaceholder: 'Labels (comma-separated)',
+    labelTooLong: (max: number) => `A label must be at most ${max} characters.`,
+    tooManyLabels: (max: number) => `A note may have at most ${max} labels.`,
     formatFormatted: 'Formatted',
     formatSyntax: 'Syntax',
     formatDefault: (label: string) => `${label} (default)`,

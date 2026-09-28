@@ -3,6 +3,7 @@ import type {
   CreateFolderInput,
   CreateNoteInput,
   Folder,
+  LabelCount,
   MeResponse,
   Note,
   NoteListResponse,
@@ -129,6 +130,10 @@ export function updateFolder(id: string, input: UpdateFolderInput): Promise<Fold
 
 export function deleteFolder(id: string): Promise<void> {
   return request<void>(`/api/folders/${id}`, { method: 'DELETE' })
+}
+
+export function listLabels(): Promise<LabelCount[]> {
+  return request<LabelCount[]>('/api/labels')
 }
 
 export function fetchSettings(): Promise<AppSettings> {

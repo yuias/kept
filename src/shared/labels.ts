@@ -1,13 +1,13 @@
 import { LABEL_MAX_CHARS, LABELS_PER_NOTE_MAX } from './limits'
 
-export type NormalizeLabelsResult = { ok: true; labels: string[] } | { ok: false; error: string }
+export type NormalizeLabelsResult = { ok: true; labels: string[] } | { ok: false; reason: 'comma' | 'too_long' | 'too_many'; error: string }
 
 /**
  * SQLite's `COLLATE NOCASE` folds ASCII only, so the JS-side dedupe and sort
  * below must fold the same way, or a label like "café"/"CAFÉ" would dedupe
  * here but not in SQL (or vice versa), and sort order could disagree too.
  */
-function asciiLower(value: string): string {
+export function asciiLower(value: string): string {
   return value.replace(/[A-Z]/g, (ch) => ch.toLowerCase())
 }
 
@@ -33,12 +33,12 @@ export function normalizeLabels(list: string[]): NormalizeLabelsResult {
   const seen = new Map<string, string>() // lowercase -> first spelling
 
   for (const raw of list) {
-    if (raw.includes(',')) return { ok: false, error: 'a label cannot contain a comma' }
+    if (raw.includes(',')) return { ok: false, reason: 'comma', error: 'a label cannot contain a comma' }
 
     const trimmed = collapseLabelWhitespace(raw)
     if (trimmed.length === 0) continue
     if (trimmed.length > LABEL_MAX_CHARS) {
-      return { ok: false, error: `a label must be at most ${LABEL_MAX_CHARS} characters` }
+      return { ok: false, reason: 'too_long', error: `a label must be at most ${LABEL_MAX_CHARS} characters` }
     }
 
     const key = asciiLower(trimmed)
@@ -47,7 +47,7 @@ export function normalizeLabels(list: string[]): NormalizeLabelsResult {
 
   const labels = [...seen.values()]
   if (labels.length > LABELS_PER_NOTE_MAX) {
-    return { ok: false, error: `a note may have at most ${LABELS_PER_NOTE_MAX} labels` }
+    return { ok: false, reason: 'too_many', error: `a note may have at most ${LABELS_PER_NOTE_MAX} labels` }
   }
   return { ok: true, labels }
 }

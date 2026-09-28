@@ -7,6 +7,7 @@
   import { describeApiError } from '../lib/errors'
   import { folderById } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { reloadLabels } from '../lib/labels.svelte'
   import { currentRoute, openNote } from '../lib/router.svelte'
   import { noteParam, type ListQuery } from '../lib/routes'
 
@@ -90,6 +91,7 @@
       if (gen !== generation) return
       items = []
       nextCursor = null
+      void reloadLabels()
     } catch (e) {
       if (gen !== generation) return
       error = describeApiError(e, m)

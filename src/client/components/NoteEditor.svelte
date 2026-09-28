@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte'
   import { effectiveFormat } from '../../shared/format'
+  import { normalizeLabels, parseLabelInput } from '../../shared/labels'
+  import { LABEL_MAX_CHARS, LABELS_PER_NOTE_MAX } from '../../shared/limits'
   import type { ConcreteFormat, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { reloadLabels, sameLabelSet } from '../lib/labels.svelte'
   import { openNote } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
@@ -35,6 +38,12 @@
   let format = $state<NoteFormat>('inherit')
   let currentFolderId = $state<string | null>(initialFolderId)
   let pickingFolder = $state(false)
+  let labelsText = $state('')
+  // The last set confirmed by the server, used to decide whether an edit to
+  // `labelsText` is worth a PATCH: `labels` bumps `updated_at` unconditionally
+  // server-side, so re-sending the same set on every keystroke would too.
+  let savedLabels = $state<string[]>([])
+  let labelsError = $state<string | null>(null)
   let pinned = $state(false)
   let archived = $state(false)
   let trashedAt = $state<number | null>(null)
@@ -78,11 +87,20 @@
       if (!creating && !hasContent()) return false
       creating = true
       try {
-        const created = await createNote({ title, body, folderId: initialFolderId })
+        // Labels typed before the note had a title or body never reached the
+        // autosave queue, so the create reads the current input instead.
+        const initialLabels = normalizeLabels(parseLabelInput(labelsText))
+        const created = await createNote({
+          title,
+          body,
+          folderId: initialFolderId,
+          ...(initialLabels.ok && initialLabels.labels.length > 0 ? { labels: initialLabels.labels } : {}),
+        })
         noteId = created.id
         format = created.format
         trashedAt = created.trashedAt
         currentFolderId = created.folderId
+        savedLabels = created.labels
         if (open) openNote(created.id, { replace: true })
       } finally {
         creating = false
@@ -92,6 +110,7 @@
     const updated = await updateNote(noteId, patch)
     format = updated.format
     trashedAt = updated.trashedAt
+    savedLabels = updated.labels
     return true
   }
 
@@ -129,6 +148,9 @@
     void (async () => {
       await autosave.flush()
       onsettled()
+      // Covers every path that changes label counts while this note was
+      // open: an edited label, a trash/restore, or a permanent delete.
+      void reloadLabels()
     })()
   })
 
@@ -143,6 +165,8 @@
       archived = note.archived
       trashedAt = note.trashedAt
       currentFolderId = note.folderId
+      savedLabels = note.labels
+      labelsText = note.labels.join(', ')
     } catch (cause) {
       loadError = describeApiError(cause, m)
     } finally {
@@ -158,6 +182,21 @@
   function onBodyInput(): void {
     if (!noteId && !creating && !hasContent()) return
     autosave.update({ body })
+  }
+
+  function onLabelsInput(): void {
+    labelsError = null
+    if (!noteId && !creating && !hasContent()) return
+
+    const result = normalizeLabels(parseLabelInput(labelsText))
+    if (!result.ok) {
+      // Commas are split out by parseLabelInput, so only length and count can fail here.
+      labelsError =
+        result.reason === 'too_long' ? m.editor.labelTooLong(LABEL_MAX_CHARS) : m.editor.tooManyLabels(LABELS_PER_NOTE_MAX)
+      return
+    }
+    if (sameLabelSet(result.labels, savedLabels)) return
+    autosave.update({ labels: result.labels })
   }
 
   async function togglePinned(): Promise<void> {
@@ -312,6 +351,17 @@
       oninput={onTitleInput}
       readonly={readOnly}
     />
+    <input
+      class="note-editor-labels"
+      type="text"
+      placeholder={m.editor.labelsPlaceholder}
+      bind:value={labelsText}
+      oninput={onLabelsInput}
+      readonly={readOnly}
+    />
+    {#if labelsError}
+      <p class="note-editor-status error">{labelsError}</p>
+    {/if}
     {#if !readOnly}
       <div class="note-editor-toolbar">
         <button type="button" disabled={!noteId} onclick={toggleFormat}>
@@ -404,6 +454,13 @@
     font-weight: 600;
     border: 0;
     padding: 4px 2px;
+  }
+
+  .note-editor-labels {
+    border: 0;
+    padding: 4px 2px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
   }
 
   .note-editor-body {
