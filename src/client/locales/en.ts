@@ -23,6 +23,10 @@ export const en = {
     themeLight: 'Light',
     themeDark: 'Dark',
   },
+  app: {
+    settingsComingSoon: 'Settings are coming soon.',
+    notFound: 'Page not found.',
+  },
   errors: {
     badRequest: 'That request was invalid.',
     unauthorized: 'Sign in to continue.',

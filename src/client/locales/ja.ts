@@ -16,6 +16,10 @@ export const ja: Messages = {
     themeLight: 'ライト',
     themeDark: 'ダーク',
   },
+  app: {
+    settingsComingSoon: '設定機能は近日公開予定です。',
+    notFound: 'ページが見つかりませんでした。',
+  },
   errors: {
     badRequest: 'リクエストが正しくありません。',
     unauthorized: 'ログインが必要です。',
