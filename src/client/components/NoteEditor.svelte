@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte'
-  import type { UpdateNoteInput } from '../../shared/types'
+  import { effectiveFormat } from '../../shared/format'
+  import type { ConcreteFormat, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
   import { describeApiError } from '../lib/errors'
   import { messages } from '../lib/i18n.svelte'
   import { openNote } from '../lib/router.svelte'
+  import { settings } from '../lib/settings.svelte'
+  import MarkdownView from './MarkdownView.svelte'
 
   // The parent unmounts this component when `?note` is removed, but never
   // remounts it in place: the only change to `id` this instance ever sees is
@@ -20,6 +23,7 @@
   let noteId = $state<string | null>(initialId === 'new' ? null : initialId)
   let title = $state('')
   let body = $state('')
+  let format = $state<NoteFormat>('inherit')
   let pinned = $state(false)
   let archived = $state(false)
   let trashedAt = $state<number | null>(null)
@@ -29,6 +33,13 @@
   let saveError = $state<string | null>(null)
 
   const readOnly = $derived(trashedAt !== null)
+  const effective = $derived(effectiveFormat(format, settings()))
+
+  // A brand-new note opens straight into the textarea so "Take a note…"
+  // does not need an extra click; an existing formatted note opens into the
+  // rendered view, with Edit available to reach the textarea.
+  let editingBody = $state(initialId === 'new')
+  const showTextarea = $derived(effective === 'syntax' || editingBody)
 
   // False once this instance starts closing, so an autosave that resolves
   // after Back has already removed `?note` does not push a new history
@@ -58,6 +69,7 @@
       try {
         const created = await createNote({ title, body })
         noteId = created.id
+        format = created.format
         trashedAt = created.trashedAt
         if (open) openNote(created.id, { replace: true })
       } finally {
@@ -66,6 +78,7 @@
       return true
     }
     const updated = await updateNote(noteId, patch)
+    format = updated.format
     trashedAt = updated.trashedAt
     return true
   }
@@ -113,6 +126,7 @@
       noteId = note.id
       title = note.title
       body = note.body
+      format = note.format
       pinned = note.pinned
       archived = note.archived
       trashedAt = note.trashedAt
@@ -138,6 +152,27 @@
     try {
       const updated = await updateNote(noteId, { pinned: !pinned })
       pinned = updated.pinned
+    } catch (cause) {
+      saveError = describeApiError(cause, m)
+    }
+  }
+
+  // Always sent as its own single-field PATCH, never merged into the
+  // debounced title/body autosave: a format change is a discrete, immediate
+  // action. Flushing first avoids a race where a body PATCH already in
+  // flight resolves after this one and overwrites `format` with the stale
+  // value it read before this PATCH committed, which would make the toggle
+  // show "(default)" for a note the server already locked to a concrete
+  // format.
+  async function toggleFormat(): Promise<void> {
+    if (!noteId) return
+    const flushed = await autosave.flush()
+    if (!flushed) return
+    const next: ConcreteFormat = effective === 'formatted' ? 'syntax' : 'formatted'
+    try {
+      const updated = await updateNote(noteId, { format: next })
+      format = updated.format
+      editingBody = false
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -247,13 +282,37 @@
       oninput={onTitleInput}
       readonly={readOnly}
     />
-    <textarea
-      class="note-editor-body"
-      placeholder={m.editor.takeANote}
-      bind:value={body}
-      oninput={onBodyInput}
-      readonly={readOnly}
-    ></textarea>
+    {#if !readOnly}
+      <div class="note-editor-toolbar">
+        <button type="button" disabled={!noteId} onclick={toggleFormat}>
+          {format === 'inherit'
+            ? m.editor.formatDefault(effective === 'formatted' ? m.editor.formatFormatted : m.editor.formatSyntax)
+            : effective === 'formatted'
+              ? m.editor.formatFormatted
+              : m.editor.formatSyntax}
+        </button>
+        {#if effective === 'formatted'}
+          <button type="button" onclick={() => (editingBody = !editingBody)}>
+            {editingBody ? m.editor.done : m.editor.edit}
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if showTextarea}
+      <textarea
+        class="note-editor-body"
+        class:mono={effective === 'syntax'}
+        placeholder={m.editor.takeANote}
+        bind:value={body}
+        oninput={onBodyInput}
+        readonly={readOnly}
+      ></textarea>
+    {:else}
+      <div class="note-editor-body note-editor-preview">
+        <MarkdownView source={body} />
+      </div>
+    {/if}
 
     {#if saveError}
       <p class="note-editor-status error">{saveError}</p>
@@ -306,6 +365,20 @@
     resize: vertical;
     border: 0;
     padding: 4px 2px;
+  }
+
+  .note-editor-body.mono {
+    font-family: var(--mono);
+  }
+
+  .note-editor-preview {
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .note-editor-toolbar {
+    display: flex;
+    gap: 8px;
   }
 
   .note-editor-title:focus-visible,
