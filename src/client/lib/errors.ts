@@ -16,6 +16,8 @@ export function describeApiError(error: unknown, messages: Messages): string {
   switch (error.code) {
     case 'bad_request':
       return messages.errors.badRequest
+    case 'bad_query':
+      return messages.errors.badQuery
     case 'unauthorized':
       return messages.errors.unauthorized
     case 'session_stale':

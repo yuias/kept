@@ -3,9 +3,11 @@ import { isNoteFormat } from '../shared/format'
 import { normalizeLabels, sortLabelsCaseInsensitive } from '../shared/labels'
 import { BODY_MAX_BYTES, PREVIEW_CHARS, TITLE_MAX_CHARS } from '../shared/limits'
 import { markdownToPlain } from '../shared/plaintext'
+import type { SearchQuery } from '../shared/search'
 import type { CreateNoteInput, LabelCount, Note, NoteFormat, NoteSummary, NoteView, UpdateNoteInput } from '../shared/types'
 import { ApiException } from './http'
 import { generateId } from './id'
+import { buildSearchWhere } from './search-sql'
 
 interface NoteRow {
   id: string
@@ -450,6 +452,8 @@ export interface ListNotesOptions {
   folderId?: string | null
   /** `undefined` = no label filter; matched case-insensitively. */
   label?: string
+  /** `undefined` = no search filter; parsed by the caller with `parseSearch`. */
+  query?: SearchQuery
   cursor: string | null
   limit: number
 }
@@ -482,6 +486,14 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
       'EXISTS (SELECT 1 FROM note_labels nl JOIN labels l ON l.id = nl.label_id WHERE nl.note_id = n.id AND l.owner = ? AND l.name = ? COLLATE NOCASE)',
     )
     bindings.push(owner, options.label)
+  }
+
+  if (options.query) {
+    const built = buildSearchWhere(options.query, owner)
+    if (built) {
+      conditions.push(built.sql)
+      bindings.push(...built.params)
+    }
   }
 
   if (options.cursor) {

@@ -111,6 +111,7 @@ export const en = {
   },
   errors: {
     badRequest: 'That request was invalid.',
+    badQuery: 'That search could not be understood.',
     unauthorized: 'Sign in to continue.',
     sessionStale: 'Your session is no longer accepted. Sign out, then sign in again.',
     notFound: 'That could not be found.',

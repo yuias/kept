@@ -104,6 +104,7 @@ export const ja: Messages = {
   },
   errors: {
     badRequest: 'リクエストが正しくありません。',
+    badQuery: '検索条件を解釈できませんでした。',
     unauthorized: 'ログインが必要です。',
     sessionStale: 'セッションが受け付けられません。ログアウトしてから入り直してください。',
     notFound: '見つかりませんでした。',

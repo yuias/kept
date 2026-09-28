@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { collapseLabelWhitespace } from '../../shared/labels'
 import { BODY_MAX_BYTES, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '../../shared/limits'
+import { parseSearch, type SearchQuery } from '../../shared/search'
 import type { CreateNoteInput, LabelCount, Note, NoteFormat, NoteListResponse, NoteView, UpdateNoteInput } from '../../shared/types'
 import { requireIdentity } from '../auth'
 import { ApiException, ownerOf, readJson, type HonoEnv } from '../http'
@@ -136,10 +137,19 @@ notesRoutes.get('/api/notes', requireIdentity, async (c) => {
   const labelParam = url.searchParams.get('label')
   const label = labelParam === null ? undefined : collapseLabelWhitespace(labelParam) || undefined
 
+  const qParam = url.searchParams.get('q')
+  let query: SearchQuery | undefined
+  if (qParam) {
+    const parsed = parseSearch(qParam)
+    if (!parsed.ok) throw new ApiException(400, 'bad_query', parsed.error)
+    query = parsed.query
+  }
+
   const result = await listNotes(c.env.DB, owner, {
     view,
     folderId,
     label,
+    query,
     cursor: url.searchParams.get('cursor'),
     limit: parseLimit(url.searchParams.get('limit')),
   })
