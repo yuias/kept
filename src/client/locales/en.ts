@@ -140,6 +140,7 @@ export const en = {
     noteTrashed: 'This note is in the trash and cannot be edited.',
     noteNotTrashed: 'Move this note to the trash before deleting it forever.',
     network: 'The server could not be reached.',
+    imageEncodeFailed: 'That image could not be converted.',
   },
 }
 

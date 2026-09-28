@@ -52,6 +52,8 @@ export function describeApiError(error: unknown, messages: Messages): string {
       return messages.errors.noteNotTrashed
     case 'network':
       return messages.errors.network
+    case 'image_encode_failed':
+      return messages.errors.imageEncodeFailed
     case 'session_expired':
       return messages.errors.sessionStale
     case 'unexpected_response':

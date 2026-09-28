@@ -3,6 +3,7 @@ import type {
   CreateFolderInput,
   CreateNoteInput,
   Folder,
+  ImageUploadResponse,
   LabelCount,
   MeResponse,
   Note,
@@ -142,4 +143,45 @@ export function fetchSettings(): Promise<AppSettings> {
 
 export function updateSettings(input: Partial<AppSettings>): Promise<AppSettings> {
   return request<AppSettings>('/api/settings', withJsonBody('PUT', input))
+}
+
+export function uploadImage(
+  webp: ArrayBuffer,
+  width: number,
+  height: number,
+  sourceUrl?: string,
+): Promise<ImageUploadResponse> {
+  const headers: Record<string, string> = {
+    'content-type': 'image/webp',
+    'x-image-width': String(width),
+    'x-image-height': String(height),
+  }
+  if (sourceUrl) headers['x-source-url'] = sourceUrl
+
+  return request<ImageUploadResponse>('/api/images', { method: 'POST', headers, body: webp })
+}
+
+/**
+ * Fetches an image through the server-side proxy. Unlike `request`, the
+ * response body is the image itself, not JSON, so this does not go through it.
+ */
+export async function fetchImageProxy(url: string): Promise<Blob> {
+  let response: Response
+  try {
+    response = await fetch(`/api/fetch-image?url=${encodeURIComponent(url)}`)
+  } catch {
+    throw new ApiError(0, 'network', 'the server could not be reached')
+  }
+
+  if (!response.ok) {
+    let error: { error?: string; message?: string } = {}
+    try {
+      error = (await response.json()) as typeof error
+    } catch {
+      // An Access login redirect or another non-JSON response.
+    }
+    throw new ApiError(response.status, error.error ?? 'error', error.message ?? 'the request failed')
+  }
+
+  return response.blob()
 }

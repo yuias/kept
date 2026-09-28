@@ -133,5 +133,6 @@ export const ja: Messages = {
     noteTrashed: 'このノートはゴミ箱に入っているため編集できません。',
     noteNotTrashed: '完全に削除する前に、ゴミ箱に移動してください。',
     network: 'サーバーに接続できませんでした。',
+    imageEncodeFailed: 'この画像は変換できませんでした。',
   },
 }

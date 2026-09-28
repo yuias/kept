@@ -9,4 +9,12 @@ export default defineConfig({
     // nature and the warning is pure noise here.
     chunkSizeWarningLimit: 1500,
   },
+  // @jsquash/webp's emscripten glue locates its wasm file with
+  // `new URL('*.wasm', import.meta.url)`; esbuild's dev-time pre-bundling
+  // does not preserve that pattern, so the dependency is excluded from it.
+  optimizeDeps: { exclude: ['@jsquash/webp'] },
+  // @jsquash/webp's `encode()` dynamically imports the SIMD or non-SIMD codec
+  // glue depending on feature detection; that code-splitting only works
+  // inside an ES module worker, not Vite's default classic/IIFE format.
+  worker: { format: 'es' },
 })
