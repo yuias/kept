@@ -3,9 +3,18 @@ import { HTTPException } from 'hono/http-exception'
 import { BODY_MAX_BYTES, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '../../shared/limits'
 import type { CreateNoteInput, Note, NoteFormat, NoteListResponse, NoteView, UpdateNoteInput } from '../../shared/types'
 import { requireIdentity } from '../auth'
-import { ownerOf, readJson, type HonoEnv } from '../http'
+import { ApiException, ownerOf, readJson, type HonoEnv } from '../http'
 import { isValidId } from '../id'
-import { createNote, getNote, listNotes, updateNote } from '../notes-repo'
+import {
+  createNote,
+  deleteNoteForever,
+  emptyTrash,
+  getNote,
+  listNotes,
+  restoreNote,
+  trashNote,
+  updateNote,
+} from '../notes-repo'
 
 export const notesRoutes = new Hono<HonoEnv>()
 
@@ -141,4 +150,37 @@ notesRoutes.patch('/api/notes/:id', requireIdentity, async (c) => {
   const note = await updateNote(c.env.DB, owner, id, input)
   if (!note) throw new HTTPException(404, { message: 'note not found' })
   return c.json(note)
+})
+
+notesRoutes.post('/api/notes/:id/trash', requireIdentity, async (c) => {
+  const owner = ownerOf(c)
+  const id = requireNoteId(c.req.param('id'))
+  const note = await trashNote(c.env.DB, owner, id)
+  if (!note) throw new HTTPException(404, { message: 'note not found' })
+  return c.json(note)
+})
+
+notesRoutes.post('/api/notes/:id/restore', requireIdentity, async (c) => {
+  const owner = ownerOf(c)
+  const id = requireNoteId(c.req.param('id'))
+  const note = await restoreNote(c.env.DB, owner, id)
+  if (!note) throw new HTTPException(404, { message: 'note not found' })
+  return c.json(note)
+})
+
+notesRoutes.delete('/api/notes/:id', requireIdentity, async (c) => {
+  const owner = ownerOf(c)
+  const id = requireNoteId(c.req.param('id'))
+  const result = await deleteNoteForever(c.env.DB, owner, id)
+  if (result === 'not_found') throw new HTTPException(404, { message: 'note not found' })
+  if (result === 'not_trashed') {
+    throw new ApiException(409, 'note_not_trashed', 'a note must be trashed before it can be permanently deleted')
+  }
+  return c.body(null, 204)
+})
+
+notesRoutes.delete('/api/trash', requireIdentity, async (c) => {
+  const owner = ownerOf(c)
+  await emptyTrash(c.env.DB, owner)
+  return c.body(null, 204)
 })

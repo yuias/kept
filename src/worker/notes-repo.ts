@@ -228,9 +228,23 @@ export async function updateNote(
     setBindings.push(Date.now())
   }
 
-  if (setClauses.length === 0) return getNote(db, owner, id)
+  if (setClauses.length === 0) {
+    // Nothing to write, so there is no write to gate: a plain read of the
+    // live trashed status is enough to decide whether to report the 409.
+    const row = await db
+      .prepare('SELECT trashed_at FROM notes WHERE id = ? AND owner = ?')
+      .bind(id, owner)
+      .first<{ trashed_at: number | null }>()
+    if (!row) return null
+    if (row.trashed_at !== null) {
+      throw new ApiException(409, 'note_trashed', 'cannot update a trashed note')
+    }
+    return getNote(db, owner, id)
+  }
 
-  let where = 'id = ? AND owner = ?'
+  // A trashed note is read-only via PATCH, whatever fields are being set, so
+  // this is enforced live in the WHERE too, alongside the format lock.
+  let where = 'id = ? AND owner = ? AND trashed_at IS NULL'
   const whereBindings: unknown[] = [id, owner]
   if (formatTarget !== undefined) {
     where += " AND NOT (format <> 'inherit' AND ? = 'inherit')"
@@ -242,11 +256,64 @@ export async function updateNote(
     .bind(...setBindings, ...whereBindings)
     .run()
 
-  if (formatTarget !== undefined && (result.meta.changes ?? 0) === 0) {
-    throw new ApiException(409, 'format_locked', 'a note cannot go back to inherit once it has a concrete format')
+  if ((result.meta.changes ?? 0) === 0) {
+    // The UPDATE's WHERE is what actually enforced the invariants; this
+    // follow-up read only classifies which one failed, for the error code.
+    const row = await db
+      .prepare('SELECT trashed_at, format FROM notes WHERE id = ? AND owner = ?')
+      .bind(id, owner)
+      .first<{ trashed_at: number | null; format: NoteFormat }>()
+    if (!row) return null
+    if (row.trashed_at !== null) {
+      throw new ApiException(409, 'note_trashed', 'cannot update a trashed note')
+    }
+    if (formatTarget !== undefined) {
+      throw new ApiException(409, 'format_locked', 'a note cannot go back to inherit once it has a concrete format')
+    }
   }
 
   return getNote(db, owner, id)
+}
+
+export async function trashNote(db: D1Database, owner: string, id: string): Promise<Note | null> {
+  const result = await db
+    .prepare('UPDATE notes SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL')
+    .bind(Date.now(), id, owner)
+    .run()
+  if ((result.meta.changes ?? 0) === 0) {
+    // Idempotent: trashing an already-trashed note is a no-op, not an error.
+    const exists = await db.prepare('SELECT 1 FROM notes WHERE id = ? AND owner = ?').bind(id, owner).first()
+    if (!exists) return null
+  }
+  return getNote(db, owner, id)
+}
+
+export async function restoreNote(db: D1Database, owner: string, id: string): Promise<Note | null> {
+  const result = await db
+    .prepare('UPDATE notes SET trashed_at = NULL WHERE id = ? AND owner = ?')
+    .bind(id, owner)
+    .run()
+  if ((result.meta.changes ?? 0) === 0) return null
+  return getNote(db, owner, id)
+}
+
+export type DeleteNoteResult = 'deleted' | 'not_found' | 'not_trashed'
+
+export async function deleteNoteForever(db: D1Database, owner: string, id: string): Promise<DeleteNoteResult> {
+  // Only checked for existence, to tell 404 apart from 409; the trashed
+  // invariant itself is enforced live in the DELETE's own WHERE clause.
+  const exists = await db.prepare('SELECT 1 FROM notes WHERE id = ? AND owner = ?').bind(id, owner).first()
+  if (!exists) return 'not_found'
+
+  const result = await db
+    .prepare('DELETE FROM notes WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL')
+    .bind(id, owner)
+    .run()
+  return (result.meta.changes ?? 0) > 0 ? 'deleted' : 'not_trashed'
+}
+
+export async function emptyTrash(db: D1Database, owner: string): Promise<void> {
+  await db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL').bind(owner).run()
 }
 
 function viewWhere(view: NoteView): string {
