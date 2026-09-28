@@ -1,0 +1,6 @@
+# Copy to `.dev.vars` (git-ignored). Local development never verifies Access
+# tokens, so these values are only here to silence wrangler's missing-secret
+# warning — dummies are fine.
+ACCESS_TEAM_DOMAIN="https://example.cloudflareaccess.com"
+ACCESS_POLICY_AUD="dummy-aud-tag"
+ALLOWED_EMAILS="dev@localhost"
