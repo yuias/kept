@@ -99,8 +99,6 @@ export const ja: Messages = {
     formatFormatted: '整形表示',
     formatSyntax: 'シンタックス表示',
     formatDefault: (label: string) => `${label}（デフォルト）`,
-    edit: '編集',
-    done: '完了',
     pin: 'ピン留め',
     unpin: 'ピン留めを解除',
     archive: 'アーカイブ',

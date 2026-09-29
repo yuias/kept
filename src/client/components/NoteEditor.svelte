@@ -16,7 +16,7 @@
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
   import ImageUrlDialog from './ImageUrlDialog.svelte'
-  import MarkdownView from './MarkdownView.svelte'
+  import type LiveEditor from './LiveEditor.svelte'
 
   // The parent unmounts this component when `?note` is removed, but never
   // remounts it in place: the only change to `id` this instance ever sees is
@@ -56,6 +56,10 @@
   let saveError = $state<string | null>(null)
 
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
+  // CodeMirror is heavy, so the live editor is fetched only when a note is
+  // actually shown in formatted mode.
+  let LiveEditorComponent = $state<typeof LiveEditor | null>(null)
+  let liveEl = $state<ReturnType<typeof LiveEditor> | undefined>(undefined)
   let urlDialogOpen = $state(false)
 
   interface ImageTask {
@@ -73,11 +77,22 @@
   const readOnly = $derived(trashedAt !== null)
   const effective = $derived(effectiveFormat(format, settings()))
 
-  // A brand-new note opens straight into the textarea so "Take a note…"
-  // does not need an extra click; an existing formatted note opens into the
-  // rendered view, with Edit available to reach the textarea.
-  let editingBody = $state(initialId === 'new')
-  const showTextarea = $derived(effective === 'syntax' || editingBody)
+  // A failed chunk load (offline, stale deploy) falls back to the plain
+  // textarea so the note stays editable.
+  let liveLoadFailed = $state(false)
+  const showTextarea = $derived(effective === 'syntax' || liveLoadFailed)
+
+  $effect(() => {
+    if (effective !== 'formatted' || LiveEditorComponent || liveLoadFailed) return
+    import('./LiveEditor.svelte').then(
+      (mod) => {
+        LiveEditorComponent = mod.default
+      },
+      () => {
+        liveLoadFailed = true
+      },
+    )
+  })
 
   // False once this instance starts closing, so an autosave that resolves
   // after Back has already removed `?note` does not push a new history
@@ -260,15 +275,17 @@
     const task = (async () => {
       try {
         const result = await work()
-        const at = body.indexOf(token)
-        if (at !== -1) {
-          const markdown = `![](${result.url})`
-          await mutateBody(replacePlaceholder(body, token, markdown), at, markdown.length - token.length)
+        const markdown = `![](${result.url})`
+        if (!liveEl?.replaceText(token, markdown)) {
+          const at = body.indexOf(token)
+          if (at !== -1) await mutateBody(replacePlaceholder(body, token, markdown), at, markdown.length - token.length)
         }
         resolveImageTask(token)
       } catch (cause) {
-        const at = body.indexOf(token)
-        if (at !== -1) await mutateBody(replacePlaceholder(body, token, ''), at, -token.length)
+        if (!liveEl?.replaceText(token, '')) {
+          const at = body.indexOf(token)
+          if (at !== -1) await mutateBody(replacePlaceholder(body, token, ''), at, -token.length)
+        }
         failImageTask(token, describeApiError(cause, m))
       }
     })()
@@ -287,6 +304,11 @@
 
   async function insertImagePlaceholder(pos: number): Promise<string> {
     const token = makePlaceholder()
+    if (liveEl) {
+      liveEl.insertText(token)
+      addImageTask(token)
+      return token
+    }
     await mutateBody(insertAt(body, pos, token), pos, token.length)
     addImageTask(token)
     return token
@@ -342,7 +364,6 @@
     try {
       const updated = await updateNote(noteId, { format: next })
       format = updated.format
-      editingBody = false
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -518,11 +539,6 @@
               ? m.editor.formatFormatted
               : m.editor.formatSyntax}
         </button>
-        {#if effective === 'formatted'}
-          <button type="button" onclick={() => (editingBody = !editingBody)}>
-            {editingBody ? m.editor.done : m.editor.edit}
-          </button>
-        {/if}
         <button type="button" onclick={openImageUrlDialog}>{m.editor.insertImageFromUrl}</button>
       </div>
     {/if}
@@ -538,10 +554,17 @@
         onpaste={handlePaste}
         readonly={readOnly}
       ></textarea>
+    {:else if LiveEditorComponent}
+      <LiveEditorComponent
+        bind:this={liveEl}
+        bind:value={body}
+        onchange={onBodyInput}
+        onpaste={handlePaste}
+        readonly={readOnly}
+        placeholder={m.editor.takeANote}
+      />
     {:else}
-      <div class="note-editor-body note-editor-preview">
-        <MarkdownView source={body} />
-      </div>
+      <div class="note-editor-body"></div>
     {/if}
 
     {#each imageTasks as task (task.token)}
@@ -640,11 +663,6 @@
 
   .note-editor-body.mono {
     font-family: var(--mono);
-  }
-
-  .note-editor-preview {
-    overflow-y: auto;
-    padding: 0;
   }
 
   .note-editor-toolbar {

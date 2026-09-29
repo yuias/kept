@@ -106,8 +106,6 @@ export const en = {
     formatFormatted: 'Formatted',
     formatSyntax: 'Syntax',
     formatDefault: (label: string) => `${label} (default)`,
-    edit: 'Edit',
-    done: 'Done',
     pin: 'Pin note',
     unpin: 'Unpin note',
     archive: 'Archive note',
