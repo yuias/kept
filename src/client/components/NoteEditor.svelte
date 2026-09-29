@@ -6,10 +6,11 @@
   import type { ConcreteFormat, ImageUploadResponse, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
+  import { formatEdited, formatFullTimestamp } from '../lib/datetime'
   import { isOutsideRect } from '../lib/dialog'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
-  import { messages } from '../lib/i18n.svelte'
+  import { locale, messages } from '../lib/i18n.svelte'
   import { insertAt, makePlaceholder, replacePlaceholder } from '../lib/image/insert'
   import { encodeToWebp, importFromUrl, uploadWebp } from '../lib/image/pipeline'
   import { reloadLabels, sameLabelSet } from '../lib/labels.svelte'
@@ -55,6 +56,7 @@
   let pinned = $state(false)
   let archived = $state(false)
   let trashedAt = $state<number | null>(null)
+  let updatedAt = $state<number | null>(null)
   let loading = $state(initialId !== 'new')
   let loadError = $state<string | null>(null)
   let status = $state<AutosaveStatus>('idle')
@@ -137,6 +139,7 @@
         noteId = created.id
         format = created.format
         trashedAt = created.trashedAt
+        updatedAt = created.updatedAt
         currentFolderId = created.folderId
         savedLabels = created.labels
         if (open) openNote(created.id, { replace: true })
@@ -148,6 +151,7 @@
     const updated = await updateNote(noteId, patch)
     format = updated.format
     trashedAt = updated.trashedAt
+    updatedAt = updated.updatedAt
     savedLabels = updated.labels
     return true
   }
@@ -236,6 +240,7 @@
       pinned = note.pinned
       archived = note.archived
       trashedAt = note.trashedAt
+      updatedAt = note.updatedAt
       currentFolderId = note.folderId
       savedLabels = note.labels
       labelsText = note.labels.join(', ')
@@ -382,6 +387,7 @@
     try {
       const updated = await updateNote(noteId, { pinned: !pinned })
       pinned = updated.pinned
+      updatedAt = updated.updatedAt
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -419,6 +425,7 @@
     try {
       const updated = await updateNote(noteId, { folderId: target })
       currentFolderId = updated.folderId
+      updatedAt = updated.updatedAt
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -429,6 +436,7 @@
     try {
       const updated = await updateNote(noteId, { archived: !archived })
       archived = updated.archived
+      updatedAt = updated.updatedAt
     } catch (cause) {
       saveError = describeApiError(cause, m)
     }
@@ -618,15 +626,22 @@
       </p>
     {/each}
 
-    {#if saveError}
-      <p class="note-editor-status error">{saveError}</p>
-    {:else if readOnly}
-      <p class="note-editor-status">{m.editor.readOnlyTrashed}</p>
-    {:else if status === 'saving'}
-      <p class="note-editor-status">{m.editor.saving}</p>
-    {:else if status === 'saved'}
-      <p class="note-editor-status">{m.editor.saved}</p>
-    {/if}
+    <div class="note-editor-footer">
+      {#if saveError}
+        <p class="note-editor-status error">{saveError}</p>
+      {:else if readOnly}
+        <p class="note-editor-status">{m.editor.readOnlyTrashed}</p>
+      {:else if status === 'saving'}
+        <p class="note-editor-status">{m.editor.saving}</p>
+      {:else if status === 'saved'}
+        <p class="note-editor-status">{m.editor.saved}</p>
+      {/if}
+      {#if noteId && updatedAt !== null}
+        <span class="note-editor-edited" title={formatFullTimestamp(updatedAt, locale())}>
+          {m.editor.lastModified(formatEdited(updatedAt, locale(), Date.now()))}
+        </span>
+      {/if}
+    </div>
 
     <div class="note-editor-actions">
       {#if readOnly}
@@ -779,6 +794,20 @@
 
   .note-editor-status.error {
     color: var(--danger);
+  }
+
+  .note-editor-footer {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 1.2em;
+  }
+
+  .note-editor-edited {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-muted);
   }
 
   .note-editor-image-dismiss {

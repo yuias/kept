@@ -127,6 +127,7 @@ export const en = {
     toggleTask: 'Toggle task',
     viewRaw: 'View raw',
     downloadMarkdown: 'Download .md',
+    lastModified: (when: string) => `Last modified ${when}`,
   },
   imageUrlDialog: {
     title: 'Insert image from URL',

@@ -120,6 +120,7 @@ export const ja: Messages = {
     toggleTask: 'タスクの完了を切り替え',
     viewRaw: 'Rawを表示',
     downloadMarkdown: '.mdをダウンロード',
+    lastModified: (when: string) => `最終更新: ${when}`,
   },
   imageUrlDialog: {
     title: 'URLから画像を挿入',
