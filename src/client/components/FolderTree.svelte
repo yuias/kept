@@ -16,6 +16,8 @@
   } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
+  import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
+  import { moveNoteToFolder } from '../lib/note-moves.svelte'
   import { currentRoute, navigate, link } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
@@ -64,6 +66,8 @@
   // here only ever matches rows of the same level: no reparenting possible.
   let dragId = $state<string | null>(null)
   let dropTarget = $state<{ id: string; after: boolean } | null>(null)
+  // Row currently hovered by a dragged note card (a different drag kind from reorder).
+  let noteDropId = $state<string | null>(null)
 
   function dropAfter(event: DragEvent): boolean {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -81,7 +85,14 @@
   }
 
   function handleDragOver(event: DragEvent, id: string): void {
-    if (dragId === null) return
+    // Checked before the reorder gates: note drops work regardless of sort mode.
+    if (event.dataTransfer && isNoteDrag(event.dataTransfer)) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+      noteDropId = id
+      return
+    }
+    if (!manualSort || dragId === null) return
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
     const after = dropAfter(event)
@@ -93,14 +104,23 @@
     // relatedTarget is null when leaving the window or entering a non-element.
     if (to instanceof Node && (event.currentTarget as HTMLElement).contains(to)) return
     if (dropTarget?.id === id) dropTarget = null
+    if (noteDropId === id) noteDropId = null
   }
 
   function handleDragEnd(): void {
     dragId = null
     dropTarget = null
+    noteDropId = null
   }
 
   async function handleDrop(event: DragEvent, id: string): Promise<void> {
+    if (event.dataTransfer && isNoteDrag(event.dataTransfer)) {
+      event.preventDefault()
+      noteDropId = null
+      const payload = readNoteDrag(event.dataTransfer)
+      if (payload) await moveNoteToFolder(payload, id)
+      return
+    }
     if (dragId === null) return
     if (isReordering()) {
       event.preventDefault()
@@ -139,14 +159,15 @@
         class:dragging={dragId === node.folder.id}
         class:drop-before={dropTarget?.id === node.folder.id && !dropTarget.after}
         class:drop-after={dropTarget?.id === node.folder.id && dropTarget.after}
+        class:drop-into={noteDropId === node.folder.id}
         role="presentation"
         title={manualSort ? undefined : m.folders.reorderDisabled}
         draggable={dragEnabled}
         ondragstart={dragEnabled ? (e) => handleDragStart(e, node.folder.id) : undefined}
-        ondragover={manualSort ? (e) => handleDragOver(e, node.folder.id) : undefined}
-        ondragleave={manualSort ? (e) => handleDragLeave(e, node.folder.id) : undefined}
-        ondrop={manualSort ? (e) => handleDrop(e, node.folder.id) : undefined}
-        ondragend={manualSort ? handleDragEnd : undefined}
+        ondragover={(e) => handleDragOver(e, node.folder.id)}
+        ondragleave={(e) => handleDragLeave(e, node.folder.id)}
+        ondrop={(e) => handleDrop(e, node.folder.id)}
+        ondragend={handleDragEnd}
       >
         {#if node.children.length > 0}
           <button

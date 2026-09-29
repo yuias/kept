@@ -249,6 +249,15 @@ button:focus-visible,
   font-weight: 600;
 }
 
+/* Note card hovering over a folder row or the "Notes" link. */
+.drop-into,
+.sidebar-link.drop-into {
+  background: var(--surface-muted);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
 .sidebar-heading {
   margin: 10px 10px 2px;
   font-size: 0.72rem;

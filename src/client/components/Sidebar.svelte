@@ -3,6 +3,8 @@
   import FolderTree from './FolderTree.svelte'
   import { canCreateSubfolder, createFolder, folderError, folderTree, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
+  import { moveNoteToFolder, noteMoveError } from '../lib/note-moves.svelte'
   import { isLabelsExpanded, labelCounts, labelError, toggleLabelsExpanded } from '../lib/labels.svelte'
   import { currentRoute, link } from '../lib/router.svelte'
   import { sidebarOpen } from '../lib/sidebar.svelte'
@@ -16,6 +18,31 @@
     return route.name === 'label' && asciiLower(route.label) === asciiLower(name)
   }
 
+  // The "Notes" link is the drop target for moving a note out of its folder.
+  let noteDropOnRoot = $state(false)
+
+  function handleRootDragOver(event: DragEvent): void {
+    if (!event.dataTransfer || !isNoteDrag(event.dataTransfer)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    noteDropOnRoot = true
+  }
+
+  function handleRootDragLeave(event: DragEvent): void {
+    const to = event.relatedTarget
+    if (to instanceof Node && (event.currentTarget as HTMLElement).contains(to)) return
+    noteDropOnRoot = false
+  }
+
+  async function handleRootDrop(event: DragEvent): Promise<void> {
+    if (!event.dataTransfer || !isNoteDrag(event.dataTransfer)) return
+    // Without this the browser may navigate to the dropped data.
+    event.preventDefault()
+    noteDropOnRoot = false
+    const payload = readNoteDrag(event.dataTransfer)
+    if (payload) await moveNoteToFolder(payload, null)
+  }
+
   async function handleNewFolder(): Promise<void> {
     const name = window.prompt(m.folders.namePrompt)
     if (!name || !name.trim()) return
@@ -25,7 +52,16 @@
 
 {#if sidebarOpen()}
   <nav class="sidebar">
-    <a class="sidebar-link" href="/" use:link aria-current={route.name === 'notes' ? 'page' : undefined}>
+    <a
+      class="sidebar-link"
+      class:drop-into={noteDropOnRoot}
+      href="/"
+      use:link
+      aria-current={route.name === 'notes' ? 'page' : undefined}
+      ondragover={handleRootDragOver}
+      ondragleave={handleRootDragLeave}
+      ondrop={handleRootDrop}
+    >
       {m.sidebar.notes}
     </a>
 
@@ -44,6 +80,9 @@
     </div>
     {#if folderError()}
       <p class="sidebar-error">{folderError()}</p>
+    {/if}
+    {#if noteMoveError()}
+      <p class="sidebar-error">{noteMoveError()}</p>
     {/if}
     {#if folders().length === 0}
       <p class="sidebar-empty">{m.folders.empty}</p>

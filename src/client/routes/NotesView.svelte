@@ -9,6 +9,7 @@
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { reloadLabels } from '../lib/labels.svelte'
+  import { notesVersion } from '../lib/note-moves.svelte'
   import { currentRoute, openNote } from '../lib/router.svelte'
   import { noteParam, type ListQuery } from '../lib/routes'
 
@@ -72,6 +73,16 @@
     // `load` also reads `query` fields; wrapping the call keeps those reads
     // untracked too, so only `queryKey` changing reruns this effect.
     untrack(() => void load())
+  })
+
+  // Reload when a note is moved from the sidebar. The first run is skipped so
+  // mounting does not issue a second list request.
+  let seenNotesVersion = untrack(notesVersion)
+  $effect(() => {
+    const version = notesVersion()
+    if (version === seenNotesVersion) return
+    seenNotesVersion = version
+    untrack(() => void load({ quiet: true }))
   })
 
   async function loadMore(): Promise<void> {
