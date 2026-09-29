@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildTree, canCreateUnder, checkMove, depthOf, isDescendantOrSelf, subtreeHeight } from './folder-tree'
+import {
+  buildTree,
+  canCreateUnder,
+  checkMove,
+  depthOf,
+  isDescendantOrSelf,
+  reorderSiblings,
+  subtreeHeight,
+} from './folder-tree'
 import type { Folder } from './types'
 import type { FolderLink } from './folder-tree'
 
@@ -184,5 +192,41 @@ describe('buildTree', () => {
   it('sorts by sort_order then name for manual', () => {
     const tree = buildTree(folders, 'manual')
     expect(tree.map((n) => n.folder.id)).toEqual(['c', 'a', 'b'])
+  })
+})
+
+describe('reorderSiblings', () => {
+  const ids = ['a', 'b', 'c', 'd']
+
+  it('moves an item before a later target', () => {
+    expect(reorderSiblings(ids, 'a', 'c', false)).toEqual(['b', 'a', 'c', 'd'])
+  })
+
+  it('moves an item after a later target', () => {
+    expect(reorderSiblings(ids, 'a', 'c', true)).toEqual(['b', 'c', 'a', 'd'])
+  })
+
+  it('moves an item before an earlier target', () => {
+    expect(reorderSiblings(ids, 'd', 'b', false)).toEqual(['a', 'd', 'b', 'c'])
+  })
+
+  it('moves an item after the last one', () => {
+    expect(reorderSiblings(ids, 'a', 'd', true)).toEqual(['b', 'c', 'd', 'a'])
+  })
+
+  it('returns null when the order would not change', () => {
+    expect(reorderSiblings(ids, 'a', 'b', false)).toBeNull()
+    expect(reorderSiblings(ids, 'b', 'a', true)).toBeNull()
+    expect(reorderSiblings(ids, 'c', 'c', true)).toBeNull()
+  })
+
+  it('returns null for ids outside the list', () => {
+    expect(reorderSiblings(ids, 'x', 'a', false)).toBeNull()
+    expect(reorderSiblings(ids, 'a', 'x', false)).toBeNull()
+  })
+
+  it('does not mutate the input', () => {
+    reorderSiblings(ids, 'a', 'd', true)
+    expect(ids).toEqual(['a', 'b', 'c', 'd'])
   })
 })

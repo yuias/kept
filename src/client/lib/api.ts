@@ -8,6 +8,7 @@ import type {
   MeResponse,
   Note,
   NoteListResponse,
+  ReorderFoldersInput,
   UpdateFolderInput,
   UpdateNoteInput,
 } from '../../shared/types'
@@ -127,6 +128,10 @@ export function createFolder(input: CreateFolderInput): Promise<Folder> {
 
 export function updateFolder(id: string, input: UpdateFolderInput): Promise<Folder> {
   return request<Folder>(`/api/folders/${id}`, withJsonBody('PATCH', input))
+}
+
+export function reorderFolders(input: ReorderFoldersInput): Promise<void> {
+  return request<void>('/api/folders/reorder', withJsonBody('POST', input))
 }
 
 export function deleteFolder(id: string): Promise<void> {

@@ -117,3 +117,21 @@ export function buildTree<T extends Folder>(folders: T[], sort: FolderSort): Fol
 
   return buildLevel(null)
 }
+
+/**
+ * Moves `dragId` next to `targetId` within a sibling id list. Returns null
+ * when either id is missing or the result would equal the input.
+ */
+export function reorderSiblings(
+  ids: readonly string[],
+  dragId: string,
+  targetId: string,
+  placeAfter: boolean,
+): string[] | null {
+  if (dragId === targetId || !ids.includes(dragId) || !ids.includes(targetId)) return null
+  const rest = ids.filter((id) => id !== dragId)
+  const targetIndex = rest.indexOf(targetId)
+  const at = targetIndex + (placeAfter ? 1 : 0)
+  const next = [...rest.slice(0, at), dragId, ...rest.slice(at)]
+  return next.every((id, i) => id === ids[i]) ? null : next
+}

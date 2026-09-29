@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FolderTreeNode } from '../../shared/folder-tree'
+  import { reorderSiblings, type FolderTreeNode } from '../../shared/folder-tree'
   import type { Folder } from '../../shared/types'
   import {
     canCreateSubfolder,
@@ -7,17 +7,23 @@
     disabledMoveTargets,
     folders,
     isFolderExpanded,
+    isReordering,
     moveFolder,
     removeFolder,
     renameFolder,
+    reorderFolders,
     toggleFolderExpanded,
   } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { currentRoute, navigate, link } from '../lib/router.svelte'
+  import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
   import FolderTree from './FolderTree.svelte'
 
   const { nodes }: { nodes: FolderTreeNode<Folder>[] } = $props()
+
+  const manualSort = $derived(settings().folderSort === 'manual')
+  const dragEnabled = $derived(manualSort && !isReordering())
 
   const m = $derived(messages())
   const route = $derived(currentRoute())
@@ -60,6 +66,65 @@
     await moveFolder(folder.id, parentId)
   }
 
+  // Each recursive instance renders one sibling level, so drag state held
+  // here only ever matches rows of the same level: no reparenting possible.
+  let dragId = $state<string | null>(null)
+  let dropTarget = $state<{ id: string; after: boolean } | null>(null)
+
+  function dropAfter(event: DragEvent): boolean {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    return event.clientY > rect.top + rect.height / 2
+  }
+
+  function handleDragStart(event: DragEvent, id: string): void {
+    dragId = id
+    menuFor = null
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move'
+      // Firefox does not start a drag without data.
+      event.dataTransfer.setData('text/plain', id)
+    }
+  }
+
+  function handleDragOver(event: DragEvent, id: string): void {
+    if (dragId === null) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    const after = dropAfter(event)
+    if (dropTarget?.id !== id || dropTarget.after !== after) dropTarget = { id, after }
+  }
+
+  function handleDragLeave(event: DragEvent, id: string): void {
+    const to = event.relatedTarget
+    // relatedTarget is null when leaving the window or entering a non-element.
+    if (to instanceof Node && (event.currentTarget as HTMLElement).contains(to)) return
+    if (dropTarget?.id === id) dropTarget = null
+  }
+
+  function handleDragEnd(): void {
+    dragId = null
+    dropTarget = null
+  }
+
+  async function handleDrop(event: DragEvent, id: string): Promise<void> {
+    if (dragId === null) return
+    if (isReordering()) {
+      event.preventDefault()
+      handleDragEnd()
+      return
+    }
+    event.preventDefault()
+    const source = dragId
+    const next = reorderSiblings(
+      nodes.map((n) => n.folder.id),
+      source,
+      id,
+      dropAfter(event),
+    )
+    handleDragEnd()
+    if (next) await reorderFolders(nodes[0]?.folder.parentId ?? null, next)
+  }
+
   async function handleDelete(folder: Folder): Promise<void> {
     menuFor = null
     if (!window.confirm(m.folders.deleteConfirm(folder.name))) return
@@ -75,7 +140,20 @@
 <ul class="folder-tree">
   {#each nodes as node (node.folder.id)}
     <li>
-      <div class="folder-row">
+      <div
+        class="folder-row"
+        class:dragging={dragId === node.folder.id}
+        class:drop-before={dropTarget?.id === node.folder.id && !dropTarget.after}
+        class:drop-after={dropTarget?.id === node.folder.id && dropTarget.after}
+        role="presentation"
+        title={manualSort ? undefined : m.folders.reorderDisabled}
+        draggable={dragEnabled}
+        ondragstart={dragEnabled ? (e) => handleDragStart(e, node.folder.id) : undefined}
+        ondragover={manualSort ? (e) => handleDragOver(e, node.folder.id) : undefined}
+        ondragleave={manualSort ? (e) => handleDragLeave(e, node.folder.id) : undefined}
+        ondrop={manualSort ? (e) => handleDrop(e, node.folder.id) : undefined}
+        ondragend={manualSort ? handleDragEnd : undefined}
+      >
         {#if node.children.length > 0}
           <button
             type="button"
@@ -92,6 +170,7 @@
           class="sidebar-link folder-link"
           href={`/folder/${encodeURIComponent(node.folder.id)}`}
           use:link
+          draggable="false"
           aria-current={route.name === 'folder' && route.id === node.folder.id ? 'page' : undefined}
         >
           {node.folder.name}
@@ -161,6 +240,18 @@
     display: flex;
     align-items: center;
     gap: 2px;
+  }
+
+  .folder-row.dragging {
+    opacity: 0.5;
+  }
+
+  .folder-row.drop-before {
+    box-shadow: 0 -2px 0 var(--accent, currentColor);
+  }
+
+  .folder-row.drop-after {
+    box-shadow: 0 2px 0 var(--accent, currentColor);
   }
 
   .folder-link {

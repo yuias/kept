@@ -47,6 +47,7 @@ export const en = {
     delete: 'Delete',
     deleteConfirm: (name: string) =>
       `Delete "${name}"? Its notes and subfolders move to the parent folder.`,
+    reorderDisabled: 'Set the folder sort order to Manual in Settings to reorder by dragging',
     noFolder: 'No folder',
     cancel: 'Cancel',
   },
