@@ -14,7 +14,8 @@ export type ParseResult = { ok: true; query: SearchQuery } | { ok: false; error:
 const ALLOWED_REGEX_FLAGS = new Set(['i', 'm', 's', 'u'])
 
 /** Heuristic for a pattern with a nested quantifier, which can backtrack catastrophically. */
-const SLOW_PATTERN_HEURISTIC = /\([^)]*[+*][^)]*\)[+*{]/
+// A quantified group holding an inner quantifier or an alternation, e.g. `(a+)+`, `(a|aa)+`.
+const SLOW_PATTERN_HEURISTIC = /\([^)]*[+*|][^)]*\)[+*{]/
 
 type RawToken =
   | { kind: 'text'; value: string }

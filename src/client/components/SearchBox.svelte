@@ -86,6 +86,7 @@
         <li>{m.search.helpPhrase}</li>
         <li>{m.search.helpOr}</li>
         <li>{m.search.helpLabelFilter}</li>
+        <li>{m.search.helpRegex}</li>
       </ul>
     </div>
   {/if}

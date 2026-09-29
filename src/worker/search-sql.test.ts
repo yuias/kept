@@ -43,6 +43,37 @@ describe('buildSearchWhere', () => {
     })
   })
 
+  it('narrows a case-sensitive regex literal with a plain instr()', () => {
+    const built = buildSearchWhere(parse('/foo\\d+bar/'), 'owner@example.com')
+    expect(built).toEqual({
+      sql: '((instr(n.title, ?) > 0 OR instr(n.body_plain, ?) > 0))',
+      params: ['foo', 'foo'],
+    })
+  })
+
+  it('narrows a regex with the i flag using lower() on both sides', () => {
+    const built = buildSearchWhere(parse('/Foo/i'), 'owner@example.com')
+    expect(built).toEqual({
+      sql: '((instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body_plain), lower(?)) > 0))',
+      params: ['Foo', 'Foo'],
+    })
+  })
+
+  it('emits no SQL for a group with a literal-less regex, but keeps other groups', () => {
+    expect(buildSearchWhere(parse('/\\d{3}-\\d{4}/'), 'o')).toBeNull()
+    expect(buildSearchWhere(parse('/\\d+/ OR coffee'), 'o')).toBeNull()
+
+    const built = buildSearchWhere(parse('/\\d+/ coffee'), 'o')
+    expect(built).toEqual({
+      sql: '((instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body_plain), lower(?)) > 0))',
+      params: ['coffee', 'coffee'],
+    })
+  })
+
+  it('does not narrow on a k or s literal under iu, where JS folds beyond ASCII', () => {
+    expect(buildSearchWhere(parse('/kiosk/iu'), 'o')).toBeNull()
+  })
+
   it('never emits LIKE, since D1 rejects LIKE patterns over 50 bytes', () => {
     const built = buildSearchWhere(parse('a OR b label:foo label:"bar baz"'), 'owner@example.com')
     expect(built?.sql).not.toMatch(/\bLIKE\b/i)

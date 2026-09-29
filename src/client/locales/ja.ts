@@ -67,11 +67,12 @@ export const ja: Messages = {
     placeholder: '検索',
     ariaLabel: 'ノートを検索',
     helpLabel: '検索構文のヘルプ',
-    helpIntro: '単語、フレーズ、OR、ラベル絞り込みを組み合わせられます。',
+    helpIntro: '単語、フレーズ、OR、ラベル絞り込み、正規表現を組み合わせられます。',
     helpWords: 'word1 word2 — すべての単語に一致するノート',
     helpPhrase: '"完全な語句" — フレーズをそのまま検索',
     helpOr: 'word1 OR word2 — いずれかの単語に一致',
     helpLabelFilter: 'label:名前 — そのラベルが付いたノートのみ',
+    helpRegex: '/正規表現/フラグ — 正規表現で検索 (フラグ: i, m, s, u)。スペースの直前のスラッシュは \\/ と書く',
     resultsFor: (q: string) => `「${q}」の検索結果`,
   },
   notes: {

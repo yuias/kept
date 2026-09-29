@@ -74,11 +74,12 @@ export const en = {
     placeholder: 'Search',
     ariaLabel: 'Search notes',
     helpLabel: 'Search syntax help',
-    helpIntro: 'Combine words, phrases, OR, and label filters:',
+    helpIntro: 'Combine words, phrases, OR, label filters, and regexes:',
     helpWords: 'word1 word2 — notes matching every word',
     helpPhrase: '"exact phrase" — matches the phrase verbatim',
     helpOr: 'word1 OR word2 — matches either word',
     helpLabelFilter: 'label:name — only notes with that label',
+    helpRegex: '/regex/flags — regular expression (flags i, m, s, u); write a slash before a space as \\/',
     resultsFor: (q: string) => `Results for "${q}"`,
   },
   notes: {

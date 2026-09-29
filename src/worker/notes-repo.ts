@@ -1,13 +1,21 @@
 import { HTTPException } from 'hono/http-exception'
 import { isNoteFormat } from '../shared/format'
-import { normalizeLabels, sortLabelsCaseInsensitive } from '../shared/labels'
-import { BODY_MAX_BYTES, PREVIEW_CHARS, TITLE_MAX_CHARS } from '../shared/limits'
+import { asciiLower, normalizeLabels, sortLabelsCaseInsensitive } from '../shared/labels'
+import {
+  BODY_MAX_BYTES,
+  PREVIEW_CHARS,
+  REGEX_ROW_CHARS_MAX,
+  REGEX_SCAN_BATCH_SIZE,
+  REGEX_SCAN_CHARS_MAX,
+  REGEX_SCAN_ROWS_MAX,
+  TITLE_MAX_CHARS,
+} from '../shared/limits'
 import { markdownToPlain } from '../shared/plaintext'
-import type { SearchQuery } from '../shared/search'
+import type { SearchAtom, SearchQuery } from '../shared/search'
 import type { CreateNoteInput, LabelCount, Note, NoteFormat, NoteSummary, NoteView, UpdateNoteInput } from '../shared/types'
 import { ApiException } from './http'
 import { generateId } from './id'
-import { buildSearchWhere } from './search-sql'
+import { buildSearchWhere, TEXT_ATOM_SQL } from './search-sql'
 
 interface NoteRow {
   id: string
@@ -461,12 +469,124 @@ export interface ListNotesOptions {
 export interface ListNotesResult {
   items: NoteSummary[]
   nextCursor: string | null
+  /** Set only when a regex scan guard stopped the scan before the end of the list. */
+  scanLimited?: boolean
+}
+
+const DEFAULT_SCAN_LIMITS = {
+  rowsMax: REGEX_SCAN_ROWS_MAX,
+  charsMax: REGEX_SCAN_CHARS_MAX,
+  batchSize: REGEX_SCAN_BATCH_SIZE,
+}
+let scanLimits = { ...DEFAULT_SCAN_LIMITS }
+
+/** Test-only: overrides the regex scan guards; pass `null` to restore the defaults. */
+export function setRegexScanLimitsForTest(overrides: Partial<typeof DEFAULT_SCAN_LIMITS> | null): void {
+  const next = { ...DEFAULT_SCAN_LIMITS, ...overrides }
+  // A zero limit would make the scan loop fetch nothing and never advance.
+  for (const value of Object.values(next)) {
+    if (!Number.isInteger(value) || value < 1) throw new RangeError('scan limits must be positive integers')
+  }
+  scanLimits = next
+}
+
+interface Cursor {
+  pinned: number
+  updatedAt: number
+  id: string
+}
+
+/**
+ * A list row plus what the JS filter needs. The body itself is never
+ * fetched in full (a batch of large notes would exhaust the Worker's
+ * memory): only its length, its first `REGEX_ROW_CHARS_MAX` chars, and one
+ * `t<n>` boolean column per text atom, evaluated in SQL.
+ */
+interface ScanRow extends NoteListRow {
+  body_len: number
+  body_head: string
+}
+
+function hasRegexAtom(query: SearchQuery): boolean {
+  return query.groups.some((group) => group.some((atom) => atom.kind === 'regex'))
+}
+
+function cursorOf(row: NoteListRow): string {
+  return `${row.pinned}.${row.updated_at}.${row.id}`
+}
+
+/** Compiles each regex once; `parseSearch` already validated them, so a failure here is still a 400. */
+function compileRegexes(query: SearchQuery): Map<SearchAtom, RegExp> {
+  const compiled = new Map<SearchAtom, RegExp>()
+  for (const group of query.groups) {
+    for (const atom of group) {
+      if (atom.kind !== 'regex') continue
+      try {
+        compiled.set(atom, new RegExp(atom.source, atom.flags))
+      } catch {
+        throw new ApiException(400, 'bad_query', 'invalid regular expression')
+      }
+    }
+  }
+  return compiled
+}
+
+/**
+ * Text atoms are evaluated in SQL with the same expression the non-scan
+ * search uses, so both modes agree on case folding and substring semantics.
+ */
+function textAtomColumns(query: SearchQuery): { columns: Map<SearchAtom, string>; sql: string; params: string[] } {
+  const columns = new Map<SearchAtom, string>()
+  const selects: string[] = []
+  const params: string[] = []
+  for (const group of query.groups) {
+    for (const atom of group) {
+      if (atom.kind !== 'text') continue
+      const name = `t${columns.size}`
+      columns.set(atom, name)
+      selects.push(`${TEXT_ATOM_SQL} AS ${name}`)
+      params.push(atom.value, atom.value)
+    }
+  }
+  return { columns, sql: selects.join(', '), params }
+}
+
+/** Exact match check, for candidates the SQL only narrowed. */
+function rowMatchesQuery(
+  row: ScanRow,
+  query: SearchQuery,
+  regexes: Map<SearchAtom, RegExp>,
+  textColumns: Map<SearchAtom, string>,
+): boolean {
+  let labels: string[] | undefined
+
+  const atomMatches = (atom: SearchAtom): boolean => {
+    switch (atom.kind) {
+      case 'text':
+        return (row as unknown as Record<string, number>)[textColumns.get(atom)!] === 1
+      case 'label': {
+        labels ??= parseLabelsJson(row.labels_json).map(asciiLower)
+        return labels.includes(asciiLower(atom.value))
+      }
+      case 'regex': {
+        const regex = regexes.get(atom)!
+        return regex.test(row.title.slice(0, REGEX_ROW_CHARS_MAX)) || regex.test(row.body_head)
+      }
+    }
+  }
+
+  return query.groups.every((group) => group.some(atomMatches))
+}
+
+interface ScanColumns {
+  sql: string
+  params: string[]
 }
 
 export async function listNotes(db: D1Database, owner: string, options: ListNotesOptions): Promise<ListNotesResult> {
-  // The subquery's `?` (bound with `owner` below) is the first placeholder in
-  // the SQL text, since it sits in the SELECT list, ahead of every WHERE
-  // condition, so it must be the first value bound too.
+  // Placeholders in the SELECT list come before every WHERE placeholder in
+  // the SQL text, so their values are bound first: the labels subquery's
+  // `owner`, then any scan columns' params (see `fetchRows`).
   const bindings: unknown[] = [owner]
 
   const conditions = ['owner = ?', viewWhere(options.view)]
@@ -496,40 +616,125 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
     }
   }
 
+  let startCursor: Cursor | null = null
   if (options.cursor) {
-    const decoded = decodeCursor(options.cursor)
-    if (!decoded) throw new HTTPException(400, { message: 'malformed cursor' })
-    // All three sort columns are DESC, so a plain row-value "<" captures the
-    // whole keyset condition in one shot.
-    conditions.push('(pinned, updated_at, id) < (?, ?, ?)')
-    bindings.push(decoded.pinned, decoded.updatedAt, decoded.id)
+    startCursor = decodeCursor(options.cursor)
+    if (!startCursor) throw new HTTPException(400, { message: 'malformed cursor' })
   }
 
-  // Fetch one extra row to detect whether another page exists.
-  bindings.push(options.limit + 1)
+  const fetchRows = async <T extends NoteListRow>(after: Cursor | null, count: number, scan: ScanColumns | null): Promise<T[]> => {
+    const rowConditions = [...conditions]
+    // `bindings[0]` is the labels subquery's owner; scan params follow it.
+    const rowBindings = [bindings[0], ...(scan?.params ?? []), ...bindings.slice(1)]
+    if (after) {
+      // All three sort columns are DESC, so a plain row-value "<" captures the
+      // whole keyset condition in one shot.
+      rowConditions.push('(pinned, updated_at, id) < (?, ?, ?)')
+      rowBindings.push(after.pinned, after.updatedAt, after.id)
+    }
+    rowBindings.push(count)
 
-  const sql = `SELECT id, folder_id, title, format, pinned, archived, trashed_at, created_at, updated_at,
+    const sql = `SELECT id, folder_id, title, format, pinned, archived, trashed_at, created_at, updated_at,
       substr(body_plain, 1, ${PREVIEW_CHARS}) AS preview,
-      ${LABELS_JSON_SUBQUERY}
+      ${LABELS_JSON_SUBQUERY}${scan ? `, ${scan.sql}` : ''}
     FROM notes n
-    WHERE ${conditions.join(' AND ')}
+    WHERE ${rowConditions.join(' AND ')}
     ORDER BY pinned DESC, updated_at DESC, id DESC
     LIMIT ?`
 
-  const { results } = await db
-    .prepare(sql)
-    .bind(...bindings)
-    .all<NoteListRow>()
+    const { results } = await db
+      .prepare(sql)
+      .bind(...rowBindings)
+      .all<T>()
+    return results ?? []
+  }
 
-  const rows = results ?? []
+  if (options.query && hasRegexAtom(options.query)) {
+    return scanNotes(fetchRows, options.query, startCursor, options.limit)
+  }
+
+  // Fetch one extra row to detect whether another page exists.
+  const rows = await fetchRows<NoteListRow>(startCursor, options.limit + 1, null)
   const hasMore = rows.length > options.limit
   const page = hasMore ? rows.slice(0, options.limit) : rows
   const last = page[page.length - 1]
 
   return {
     items: page.map(toNoteSummary),
-    nextCursor: hasMore && last ? `${last.pinned}.${last.updated_at}.${last.id}` : null,
+    nextCursor: hasMore && last ? cursorOf(last) : null,
   }
+}
+
+/**
+ * Regex queries cannot be fully expressed in SQL, so candidates (already
+ * narrowed by `buildSearchWhere`) are read in batches and filtered in JS,
+ * in list order. The scan stops at `limit` matches or when a row/char guard
+ * trips; `nextCursor` is then the last scanned row, so the client resumes
+ * exactly where the scan ended.
+ */
+async function scanNotes(
+  fetchRows: <T extends NoteListRow>(after: Cursor | null, count: number, scan: ScanColumns | null) => Promise<T[]>,
+  query: SearchQuery,
+  startCursor: Cursor | null,
+  limit: number,
+): Promise<ListNotesResult> {
+  const regexes = compileRegexes(query)
+  const text = textAtomColumns(query)
+  const scanColumns: ScanColumns = {
+    sql: `length(body_plain) AS body_len, substr(body_plain, 1, ${REGEX_ROW_CHARS_MAX}) AS body_head${text.sql ? `, ${text.sql}` : ''}`,
+    params: text.params,
+  }
+  const { rowsMax, charsMax, batchSize } = scanLimits
+  const matches: ScanRow[] = []
+  let scannedRows = 0
+  let scannedChars = 0
+  let last: ScanRow | undefined
+  let after = startCursor
+  let exhausted = false
+  let scanLimited = false
+
+  scan: while (true) {
+    const want = Math.min(batchSize, rowsMax - scannedRows)
+    // One extra row tells an exhausted list apart from a guard that stopped early.
+    const fetched = await fetchRows<ScanRow>(after, want + 1, scanColumns)
+    const hasMore = fetched.length > want
+    const batch = hasMore ? fetched.slice(0, want) : fetched
+
+    for (const [index, row] of batch.entries()) {
+      if (scannedChars >= charsMax) {
+        scanLimited = true
+        break scan
+      }
+      scannedRows += 1
+      scannedChars += row.body_len
+      last = row
+
+      if (rowMatchesQuery(row, query, regexes, text.columns)) {
+        matches.push(row)
+        if (matches.length >= limit) {
+          exhausted = index === batch.length - 1 && !hasMore
+          break scan
+        }
+      }
+    }
+
+    if (!hasMore) {
+      exhausted = true
+      break
+    }
+    if (scannedRows >= rowsMax) {
+      scanLimited = true
+      break
+    }
+    after = { pinned: last!.pinned, updatedAt: last!.updated_at, id: last!.id }
+  }
+
+  const result: ListNotesResult = {
+    items: matches.map(toNoteSummary),
+    nextCursor: exhausted || !last ? null : cursorOf(last),
+  }
+  if (scanLimited) result.scanLimited = true
+  return result
 }
 
 /** Counts each label's non-trashed notes, ordered by name case-insensitively. */

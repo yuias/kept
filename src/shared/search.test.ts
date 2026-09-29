@@ -176,6 +176,16 @@ describe('parseSearch', () => {
       expect(result).toEqual({ ok: false, error: 'pattern may be too slow' })
     })
 
+    it('rejects a quantified group containing alternation as too slow', () => {
+      for (const q of ['/(a|aa)+/', '/(.|\\s)*x/', '/(foo|bar){2,}/']) {
+        expect(parseSearch(q), q).toEqual({ ok: false, error: 'pattern may be too slow' })
+      }
+    })
+
+    it('accepts alternation in a group that is not quantified', () => {
+      expect(parseSearch('/(foo|bar)baz/').ok).toBe(true)
+    })
+
     it('rejects an invalid pattern', () => {
       expect(parseSearch('/(/').ok).toBe(false)
       expect(parseSearch('/[/').ok).toBe(false)

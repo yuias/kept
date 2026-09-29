@@ -26,3 +26,6 @@ export const FETCH_MAX_REDIRECTS = 3
 export const REGEX_SOURCE_MAX_CHARS = 200
 export const REGEX_SCAN_ROWS_MAX = 2000
 export const REGEX_SCAN_CHARS_MAX = 4_000_000
+// Bounds the text one regex test sees, since the scan guards cap only the total.
+export const REGEX_ROW_CHARS_MAX = 20_000
+export const REGEX_SCAN_BATCH_SIZE = 200
