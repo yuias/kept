@@ -3,6 +3,7 @@
   import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
   import { messages } from '../lib/i18n.svelte'
   import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
+  import { writeNoteDrag } from '../lib/note-drag'
   import Icon from './Icon.svelte'
 
   type CardPatch = Pick<UpdateNoteInput, 'pinned' | 'archived'>
@@ -22,6 +23,7 @@
   const m = $derived(messages())
 
   let busy = $state(false)
+  let dragging = $state(false)
   const menuKey = $derived(`note:${note.id}`)
 
   async function run(patch: CardPatch): Promise<void> {
@@ -33,6 +35,14 @@
     }
   }
 
+  function handleDragStart(event: DragEvent): void {
+    if (!event.dataTransfer) return
+    closeMenu()
+    event.dataTransfer.effectAllowed = 'move'
+    writeNoteDrag(event.dataTransfer, { id: note.id, folderId: note.folderId })
+    dragging = true
+  }
+
   // An empty note keeps its text strip so the card stays clickable.
   const showText = $derived(
     note.images.length === 0 || Boolean(note.title || note.preview || note.labels.length > 0),
@@ -41,17 +51,24 @@
   const archiveLabel = $derived(note.archived ? m.editor.unarchive : m.editor.archive)
 </script>
 
-<div class="note-card card">
+<div class="note-card card" class:dragging>
+  <!--
+    Known limitation: Firefox may not start a drag from a <button>. The "Move to folder"
+    menu is the fallback there, and the only path on touch devices.
+  -->
   <button
     type="button"
     class="note-card-open"
+    draggable={note.trashedAt === null}
+    ondragstart={handleDragStart}
+    ondragend={() => (dragging = false)}
     onclick={() => onopen(note.id)}
     aria-label={!note.title && !note.preview ? m.notes.untitledNote : undefined}
   >
     {#if note.images.length > 0}
       <span class="note-card-images" data-count={Math.min(note.images.length, 4)}>
         {#each note.images as src (src)}
-          <img {src} alt="" loading="lazy" decoding="async" />
+          <img {src} alt="" draggable="false" loading="lazy" decoding="async" />
         {/each}
       </span>
     {/if}
@@ -139,6 +156,10 @@
   .note-card:hover,
   .note-card:focus-within {
     border-color: var(--accent);
+  }
+
+  .note-card.dragging {
+    opacity: 0.5;
   }
 
   .note-card-open {
