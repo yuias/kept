@@ -425,11 +425,14 @@ export async function deleteNoteForever(db: D1Database, owner: string, id: strin
   return (results[0]?.meta.changes ?? 0) > 0 ? 'deleted' : 'not_trashed'
 }
 
-export async function emptyTrash(db: D1Database, owner: string): Promise<void> {
-  await db.batch([
-    db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL').bind(owner),
-    deleteOrphanLabelsStatement(db, owner),
-  ])
+/** Deletes the owner's trashed notes (only those trashed at or before `trashedAtOrBefore`, when given) and orphaned labels; returns the count. */
+export async function emptyTrash(db: D1Database, owner: string, trashedAtOrBefore?: number): Promise<number> {
+  const deleteNotes =
+    trashedAtOrBefore === undefined
+      ? db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL').bind(owner)
+      : db.prepare('DELETE FROM notes WHERE owner = ? AND trashed_at IS NOT NULL AND trashed_at <= ?').bind(owner, trashedAtOrBefore)
+  const results = await db.batch([deleteNotes, deleteOrphanLabelsStatement(db, owner)])
+  return results[0]?.meta.changes ?? 0
 }
 
 function viewWhere(view: NoteView): string {
