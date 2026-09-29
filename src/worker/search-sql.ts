@@ -10,6 +10,8 @@ function atomSql(atom: SearchAtom, owner: string, params: string[]): string {
       // owner's same-named label, since `note_labels` has no owner column.
       params.push(owner, atom.value)
       return 'EXISTS (SELECT 1 FROM note_labels nl JOIN labels l ON l.id = nl.label_id WHERE nl.note_id = n.id AND l.owner = ? AND l.name = ? COLLATE NOCASE)'
+    case 'regex':
+      throw new Error('regex atoms cannot be expressed in SQL yet')
   }
 }
 

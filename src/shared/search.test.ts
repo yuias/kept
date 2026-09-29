@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { SEARCH_ATOMS_MAX } from './limits'
-import { parseSearch, type SearchQuery } from './search'
+import { REGEX_SOURCE_MAX_CHARS, SEARCH_ATOMS_MAX } from './limits'
+import { parseSearch, type SearchAtom, type SearchQuery } from './search'
+
+function atomLabel(atom: SearchAtom): string {
+  switch (atom.kind) {
+    case 'text':
+      return atom.value
+    case 'label':
+      return `label:${atom.value}`
+    case 'regex':
+      return `/${atom.source}/${atom.flags}`
+  }
+}
 
 function groupsOf(query: SearchQuery): unknown[][] {
-  return query.groups.map((group) => group.map((atom) => (atom.kind === 'text' ? atom.value : `label:${atom.value}`)))
+  return query.groups.map((group) => group.map((atom) => atomLabel(atom)))
 }
 
 describe('parseSearch', () => {
@@ -101,5 +112,99 @@ describe('parseSearch', () => {
     const result = parseSearch('label: foo')
     if (!result.ok) throw new Error(result.error)
     expect(groupsOf(result.query)).toEqual([['foo']])
+  })
+
+  describe('regex atoms', () => {
+    function parseOk(input: string): SearchQuery {
+      const result = parseSearch(input)
+      if (!result.ok) throw new Error(result.error)
+      return result.query
+    }
+
+    it('parses /foo bar/i as one atom, spaces included', () => {
+      expect(parseOk('/foo bar/i').groups).toEqual([[{ kind: 'regex', source: 'foo bar', flags: 'i' }]])
+    })
+
+    it('keeps an escaped slash inside the pattern', () => {
+      expect(parseOk('/a\\/b/').groups).toEqual([[{ kind: 'regex', source: 'a\\/b', flags: '' }]])
+    })
+
+    it('does not treat an escaped backslash before the slash as an escape', () => {
+      expect(parseOk('/a\\\\/').groups).toEqual([[{ kind: 'regex', source: 'a\\\\', flags: '' }]])
+    })
+
+    it('accepts every allowed flag', () => {
+      expect(parseOk('/x/imsu').groups).toEqual([[{ kind: 'regex', source: 'x', flags: 'imsu' }]])
+    })
+
+    it('combines a regex with other atoms and OR', () => {
+      expect(groupsOf(parseOk('/foo/ OR bar label:x'))).toEqual([['/foo/', 'bar'], ['label:x']])
+    })
+
+    it('keeps a regex followed by more words separate', () => {
+      expect(groupsOf(parseOk('/a b/i c'))).toEqual([['/a b/i'], ['c']])
+    })
+
+    it('parses two adjacent regexes as two atoms', () => {
+      expect(parseOk('/a/ /b/').groups).toEqual([
+        [{ kind: 'regex', source: 'a', flags: '' }],
+        [{ kind: 'regex', source: 'b', flags: '' }],
+      ])
+    })
+
+    it('parses a regex followed by a slash-containing word as regex + text', () => {
+      expect(parseOk('/foo/ path/to').groups).toEqual([
+        [{ kind: 'regex', source: 'foo', flags: '' }],
+        [{ kind: 'text', value: 'path/to' }],
+      ])
+    })
+
+    it('reports /usr/local/bin as a bad-flag error', () => {
+      expect(parseSearch('/usr/local/bin').ok).toBe(false)
+    })
+
+    it('rejects a flag outside imsu', () => {
+      expect(parseSearch('/x/g').ok).toBe(false)
+    })
+
+    it('rejects a duplicated flag', () => {
+      expect(parseSearch('/x/ii').ok).toBe(false)
+    })
+
+    it('rejects a nested quantifier as too slow', () => {
+      const result = parseSearch('/(a+)+/')
+      expect(result).toEqual({ ok: false, error: 'pattern may be too slow' })
+    })
+
+    it('rejects an invalid pattern', () => {
+      expect(parseSearch('/(/').ok).toBe(false)
+      expect(parseSearch('/[/').ok).toBe(false)
+    })
+
+    it('rejects an empty pattern', () => {
+      expect(parseSearch('//').ok).toBe(false)
+    })
+
+    it('rejects a pattern over REGEX_SOURCE_MAX_CHARS', () => {
+      expect(parseSearch(`/${'a'.repeat(REGEX_SOURCE_MAX_CHARS + 1)}/`).ok).toBe(false)
+      expect(parseSearch(`/${'a'.repeat(REGEX_SOURCE_MAX_CHARS)}/`).ok).toBe(true)
+    })
+
+    it('counts a regex toward SEARCH_ATOMS_MAX', () => {
+      const words = Array.from({ length: SEARCH_ATOMS_MAX }, (_, i) => `w${i}`)
+      expect(parseSearch(`${words.join(' ')} /x/`).ok).toBe(false)
+    })
+
+    it('leaves path/to as a text atom', () => {
+      expect(parseOk('path/to').groups).toEqual([[{ kind: 'text', value: 'path/to' }]])
+    })
+
+    it('leaves an unterminated /foo as a text atom', () => {
+      expect(parseOk('/foo').groups).toEqual([[{ kind: 'text', value: '/foo' }]])
+    })
+
+    it('does not start a regex in the middle of a word', () => {
+      expect(parseOk('a/b/i').groups).toEqual([[{ kind: 'text', value: 'a/b/i' }]])
+    })
   })
 })
