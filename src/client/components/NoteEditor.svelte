@@ -9,6 +9,7 @@
   import { formatEdited, formatFullTimestamp } from '../lib/datetime'
   import { isOutsideRect } from '../lib/dialog'
   import { describeApiError } from '../lib/errors'
+  import { formatToCommit, nextFormat, showsDefault } from '../lib/format-toggle'
   import { folderById, folders } from '../lib/folders.svelte'
   import { locale, messages } from '../lib/i18n.svelte'
   import { insertAt, makePlaceholder, replacePlaceholder } from '../lib/image/insert'
@@ -42,6 +43,9 @@
   let title = $state('')
   let body = $state('')
   let format = $state<NoteFormat>('inherit')
+  // The toggle only changes this; the PATCH is sent when the editor closes so
+  // that flipping back and forth never touches the server (or the note's order).
+  let pendingFormat = $state<ConcreteFormat | null>(null)
   let currentFolderId = $state<string | null>(initialFolderId)
   const currentFolderName = $derived(
     currentFolderId ? (folderById(currentFolderId)?.name ?? m.folders.noFolder) : m.folders.noFolder,
@@ -82,7 +86,9 @@
   const inflightImages = new Set<Promise<void>>()
 
   const readOnly = $derived(trashedAt !== null)
-  const effective = $derived(effectiveFormat(format, settings()))
+  const effective = $derived(pendingFormat ?? effectiveFormat(format, settings()))
+
+  const formatLabel = $derived(effective === 'formatted' ? m.editor.formatFormatted : m.editor.formatSyntax)
 
   // A failed chunk load (offline, stale deploy) falls back to the plain
   // textarea so the note stays editable.
@@ -223,6 +229,7 @@
     void (async () => {
       await Promise.allSettled([...inflightImages])
       await autosave.flush()
+      await commitFormat()
       onsettled()
       // Covers every path that changes label counts while this note was
       // open: an edited label, a trash/restore, or a permanent delete.
@@ -393,30 +400,51 @@
     }
   }
 
-  // Always sent as its own single-field PATCH, never merged into the
-  // debounced title/body autosave: a format change is a discrete, immediate
-  // action. Flushing first avoids a race where a body PATCH already in
-  // flight resolves after this one and overwrites `format` with the stale
-  // value it read before this PATCH committed, which would make the toggle
-  // show "(default)" for a note the server already locked to a concrete
-  // format.
-  async function toggleFormat(): Promise<void> {
-    if (!noteId) return
-    const flushed = await autosave.flush()
-    if (!flushed) return
-    const next: ConcreteFormat = effective === 'formatted' ? 'syntax' : 'formatted'
+  // Local only: the format is committed by `commitFormat` when the editor
+  // closes, always after `autosave.flush()`, so a body PATCH can never
+  // overwrite it. The UI reads `pendingFormat` first, so it switches at once.
+  function toggleFormat(): void {
+    pendingFormat = nextFormat(effective)
+  }
+
+  let formatCommit: Promise<boolean> | null = null
+
+  /** Resolves true when nothing is left to commit (committed, or nothing to do). */
+  async function commitFormat(): Promise<boolean> {
+    if (formatCommit) return formatCommit
+    // A trashed note rejects PATCH; skip the request that is known to 409.
+    if (trashedAt !== null) return true
+    const id = noteId
+    const target = id ? formatToCommit(format, pendingFormat, settings().defaultFormat) : null
+    if (!id || target === null) return true
+    formatCommit = (async () => {
+      try {
+        const updated = await updateNote(id, { format: target })
+        format = updated.format
+        updatedAt = updated.updatedAt
+        pendingFormat = null
+        return true
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.code === 'note_trashed') {
+          // Trashed elsewhere: the note is read-only now, so drop the change and let it close.
+          trashedAt = Date.now()
+          pendingFormat = null
+          return true
+        }
+        saveError = describeApiError(cause, m)
+        return false
+      }
+    })()
     try {
-      const updated = await updateNote(noteId, { format: next })
-      format = updated.format
-    } catch (cause) {
-      saveError = describeApiError(cause, m)
+      return await formatCommit
+    } finally {
+      formatCommit = null
     }
   }
 
-  // Sent as its own single-field PATCH, flushing pending autosave first for
-  // the same reason `toggleFormat` does: a body PATCH still in flight could
-  // otherwise resolve after this one and overwrite `folderId` with the value
-  // it read before the move committed.
+  // Sent as its own single-field PATCH, flushing pending autosave first: a
+  // body PATCH still in flight could otherwise resolve after this one and
+  // overwrite `folderId` with the value it read before the move committed.
   async function moveNote(target: string | null): Promise<void> {
     pickingFolder = false
     if (!noteId || target === currentFolderId) return
@@ -451,6 +479,8 @@
       // would abandon it for good, so stop and show the error instead.
       const flushed = await autosave.flush()
       if (!flushed) return
+      // Committed before trashing: after the trash, the PATCH would hit a 409.
+      if (!(await commitFormat())) return
       await trashNote(noteId)
       close()
     } catch (cause) {
@@ -521,7 +551,9 @@
     try {
       await Promise.allSettled([...inflightImages])
       const flushed = await autosave.flush()
-      if (flushed) close()
+      if (!flushed) return
+      if (!(await commitFormat())) return
+      close()
     } finally {
       closing = false
     }
@@ -543,6 +575,7 @@
   async function handleDialogClose(): Promise<void> {
     await Promise.allSettled([...inflightImages])
     await autosave.flush()
+    await commitFormat()
     onclose()
   }
 </script>
@@ -580,12 +613,8 @@
     {/if}
     {#if !readOnly}
       <div class="note-editor-toolbar">
-        <button type="button" disabled={!noteId} onclick={toggleFormat}>
-          {format === 'inherit'
-            ? m.editor.formatDefault(effective === 'formatted' ? m.editor.formatFormatted : m.editor.formatSyntax)
-            : effective === 'formatted'
-              ? m.editor.formatFormatted
-              : m.editor.formatSyntax}
+        <button type="button" onclick={toggleFormat}>
+          {showsDefault(format, pendingFormat, settings().defaultFormat) ? m.editor.formatDefault(formatLabel) : formatLabel}
         </button>
         <button type="button" onclick={openImageUrlDialog}>{m.editor.insertImageFromUrl}</button>
       </div>
