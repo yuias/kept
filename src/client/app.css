@@ -299,6 +299,8 @@ button:focus-visible,
 }
 
 .label-link {
+  padding: 5px 10px;
+  font-size: 0.88rem;
   display: flex;
   align-items: center;
   justify-content: space-between;

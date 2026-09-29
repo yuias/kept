@@ -255,6 +255,8 @@
   }
 
   .folder-link {
+    padding: 5px 10px;
+    font-size: 0.88rem;
     flex: 1;
     min-width: 0;
     overflow: hidden;
