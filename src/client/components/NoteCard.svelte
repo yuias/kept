@@ -2,6 +2,7 @@
   import { sortLabelsCaseInsensitive } from '../../shared/labels'
   import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
   import { messages } from '../lib/i18n.svelte'
+  import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
   import Icon from './Icon.svelte'
 
   type CardPatch = Pick<UpdateNoteInput, 'pinned' | 'archived'>
@@ -10,15 +11,18 @@
     note,
     onopen,
     onupdate,
+    onmove,
   }: {
     note: NoteSummary
     onopen: (id: string) => void
     onupdate: (id: string, patch: CardPatch) => Promise<void>
+    onmove: (note: NoteSummary) => void
   } = $props()
 
   const m = $derived(messages())
 
   let busy = $state(false)
+  const menuKey = $derived(`note:${note.id}`)
 
   async function run(patch: CardPatch): Promise<void> {
     busy = true
@@ -93,6 +97,34 @@
       >
         <Icon name={note.archived ? 'unarchive' : 'archive'} size={14} />
       </button>
+      <span class="note-card-menu" use:menuRoot={menuKey}>
+        <button
+          type="button"
+          class="icon-button note-card-menu-trigger"
+          aria-label={m.notes.cardActions}
+          title={m.notes.cardActions}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen(menuKey)}
+          disabled={busy}
+          onclick={() => toggleMenu(menuKey)}
+        >
+          <span class="note-card-menu-glyph" aria-hidden="true">⋯</span>
+        </button>
+        {#if isMenuOpen(menuKey)}
+          <span class="popup-menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                closeMenu()
+                onmove(note)
+              }}
+            >
+              {m.notes.moveToFolder}
+            </button>
+          </span>
+        {/if}
+      </span>
     </span>
   {/if}
 </div>
@@ -100,7 +132,6 @@
 <style>
   .note-card {
     position: relative;
-    overflow: hidden;
     min-width: 0;
     max-width: 100%;
   }
@@ -117,7 +148,9 @@
     width: 100%;
     padding: 0;
     border: 0;
-    border-radius: 0;
+    /* The card no longer clips (its popup menu must overflow), so the button clips images itself. */
+    border-radius: inherit;
+    overflow: hidden;
     background: none;
     color: inherit;
     text-align: left;
@@ -179,28 +212,42 @@
     gap: 2px;
   }
 
+  .note-card-menu {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .note-card-menu-glyph {
+    display: block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+  }
+
   /* Opacity rather than display/visibility keeps the buttons focusable. */
-  .note-card-actions button {
+  .note-card-actions .icon-button {
     background: var(--surface);
     opacity: 0;
     transition: opacity 0.12s;
   }
 
-  .note-card:hover .note-card-actions button,
-  .note-card:focus-within .note-card-actions button,
-  .note-card-actions button.active {
+  .note-card:hover .note-card-actions .icon-button,
+  .note-card:focus-within .note-card-actions .icon-button,
+  .note-card-actions .icon-button.active,
+  .note-card-actions .icon-button[aria-expanded='true'] {
     opacity: 1;
   }
 
   /* Must out-rank the hover/focus-within reveal rules above. */
-  .note-card-actions button:disabled,
-  .note-card:hover .note-card-actions button:disabled,
-  .note-card:focus-within .note-card-actions button:disabled {
+  .note-card-actions .icon-button:disabled,
+  .note-card:hover .note-card-actions .icon-button:disabled,
+  .note-card:focus-within .note-card-actions .icon-button:disabled {
     opacity: 0.5;
   }
 
   @media (hover: none) {
-    .note-card-actions button {
+    .note-card-actions .icon-button {
       opacity: 1;
     }
   }

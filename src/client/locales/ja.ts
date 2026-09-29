@@ -80,6 +80,8 @@ export const ja: Messages = {
     pinned: 'ピン留め',
     others: 'その他',
     untitledNote: '無題のノート',
+    cardActions: 'ノートの操作',
+    moveToFolder: 'フォルダへ移動…',
     loadMore: 'もっと読み込む',
     loading: '読み込み中…',
     emptyNotes: 'ノートはまだありません。',

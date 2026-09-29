@@ -87,6 +87,8 @@ export const en = {
     pinned: 'Pinned',
     others: 'Others',
     untitledNote: 'Untitled note',
+    cardActions: 'Note actions',
+    moveToFolder: 'Move to folder…',
     loadMore: 'Load more',
     loading: 'Loading…',
     emptyNotes: 'No notes yet.',

@@ -6,10 +6,12 @@
     notes,
     onopen,
     onupdate,
+    onmove,
   }: {
     notes: NoteSummary[]
     onopen: (id: string) => void
     onupdate: (id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived'>) => Promise<void>
+    onmove: (note: NoteSummary) => void
   } = $props()
 
   let container: HTMLDivElement | undefined
@@ -39,7 +41,7 @@
   {#each buckets as bucket, i (i)}
     <div class="note-column">
       {#each bucket as note (note.id)}
-        <NoteCard {note} {onopen} {onupdate} />
+        <NoteCard {note} {onopen} {onupdate} {onmove} />
       {/each}
     </div>
   {/each}

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
+  import FolderPicker from '../components/FolderPicker.svelte'
   import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
   import { emptyTrash as emptyTrashRequest, listNotes, updateNote } from '../lib/api'
   import { describeApiError } from '../lib/errors'
-  import { folderById } from '../lib/folders.svelte'
+  import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { reloadLabels } from '../lib/labels.svelte'
   import { currentRoute, openNote } from '../lib/router.svelte'
@@ -32,6 +33,7 @@
   // cursor must not be appended to a first page that is about to be replaced.
   let reloading = $state(false)
   let error = $state<string | null>(null)
+  let movingNote = $state<NoteSummary | null>(null)
 
   // `query` is a fresh object on every render (it is derived from route state
   // that `openNote` also touches), so keying the reload effect on a primitive
@@ -92,7 +94,7 @@
     }
   }
 
-  async function updateFromCard(id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived'>): Promise<void> {
+  async function updateFromCard(id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived' | 'folderId'>): Promise<void> {
     const gen = generation
     try {
       await updateNote(id, patch)
@@ -102,6 +104,13 @@
       return
     }
     await load({ quiet: true })
+  }
+
+  function handleMovePick(folderId: string | null): void {
+    const note = movingNote
+    movingNote = null
+    if (!note || folderId === note.folderId) return
+    void updateFromCard(note.id, { folderId })
   }
 
   async function handleEmptyTrash(): Promise<void> {
@@ -166,14 +175,24 @@
   {:else if query.view === 'notes'}
     {#if pinned.length > 0}
       <h2 class="notes-heading">{m.notes.pinned}</h2>
-      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} />
+      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
       {#if others.length > 0}
         <h2 class="notes-heading">{m.notes.others}</h2>
       {/if}
     {/if}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
   {:else}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
+  {/if}
+
+  {#if movingNote}
+    <FolderPicker
+      title={m.editor.moveTo}
+      folders={folders()}
+      disabledIds={movingNote.folderId ? [movingNote.folderId] : []}
+      onpick={handleMovePick}
+      oncancel={() => (movingNote = null)}
+    />
   {/if}
 
   {#if nextCursor}
