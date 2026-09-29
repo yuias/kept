@@ -11,6 +11,9 @@
     placeholder as placeholderExtension,
   } from '@codemirror/view'
   import { onMount, untrack } from 'svelte'
+  import { messages } from '../lib/i18n.svelte'
+  import { placeholderRange } from '../lib/image/insert'
+  import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
   import { minimalChange } from '../lib/live/sync'
 
@@ -67,7 +70,10 @@
           keymap.of(markdownKeymap),
           EditorView.lineWrapping,
           liveDecorations,
+          liveBlocks,
+          taskLabel.of(() => messages().editor.toggleTask),
           liveTheme,
+          blocksTheme,
           paste,
           placeholderSlot.of(placeholderExtension(untrack(() => placeholder))),
           editableSlot.of(editableExtensions(untrack(() => readonly))),
@@ -125,9 +131,9 @@
    */
   export function replaceText(token: string, s: string): boolean {
     if (!view) return false
-    const at = view.state.doc.toString().indexOf(token)
-    if (at === -1) return false
-    view.dispatch({ changes: { from: at, to: at + token.length, insert: s } })
+    const range = placeholderRange(view.state.doc.toString(), token)
+    if (!range) return false
+    view.dispatch({ changes: { ...range, insert: s } })
     return true
   }
 

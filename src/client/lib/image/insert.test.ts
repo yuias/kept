@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertAt, makePlaceholder, replacePlaceholder } from './insert'
+import { insertAt, makePlaceholder, placeholderRange, replacePlaceholder } from './insert'
 
 describe('makePlaceholder', () => {
   it('returns an image markdown placeholder with an empty target', () => {
@@ -49,5 +49,15 @@ describe('replacePlaceholder', () => {
 
   it('returns the text unchanged when the token is not present', () => {
     expect(replacePlaceholder('no token here', '![uploading-1]()', 'X')).toBe('no token here')
+  })
+})
+
+describe('placeholderRange', () => {
+  it('locates the first occurrence', () => {
+    expect(placeholderRange('a ![uploading-1]() b ![uploading-1]()', '![uploading-1]()')).toEqual({ from: 2, to: 18 })
+  })
+
+  it('returns null when the token is gone', () => {
+    expect(placeholderRange('nothing', '![uploading-1]()')).toBeNull()
   })
 })

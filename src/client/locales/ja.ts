@@ -116,6 +116,7 @@ export const ja: Messages = {
     imageUploading: '画像をアップロード中…',
     imageFailed: (message: string) => `画像の処理に失敗しました: ${message}`,
     dismiss: '閉じる',
+    toggleTask: 'タスクの完了を切り替え',
     viewRaw: 'Rawを表示',
     downloadMarkdown: '.mdをダウンロード',
   },
