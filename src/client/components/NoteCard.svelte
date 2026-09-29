@@ -29,6 +29,10 @@
     }
   }
 
+  // An empty note keeps its text strip so the card stays clickable.
+  const showText = $derived(
+    note.images.length === 0 || Boolean(note.title || note.preview || note.labels.length > 0),
+  )
   const pinLabel = $derived(note.pinned ? m.editor.unpin : m.editor.pin)
   const archiveLabel = $derived(note.archived ? m.editor.unarchive : m.editor.archive)
 </script>
@@ -40,21 +44,30 @@
     onclick={() => onopen(note.id)}
     aria-label={!note.title && !note.preview ? m.notes.untitledNote : undefined}
   >
-    <span class="note-card-text">
-      {#if note.title}
-        <span class="note-title">{note.title}</span>
-      {/if}
-      {#if note.preview}
-        <span class="note-preview">{note.preview}</span>
-      {/if}
-      {#if note.labels.length > 0}
-        <span class="note-labels">
-          {#each sortLabelsCaseInsensitive(note.labels) as label (label)}
-            <span class="note-label-chip">{label}</span>
-          {/each}
-        </span>
-      {/if}
-    </span>
+    {#if note.images.length > 0}
+      <span class="note-card-images" data-count={Math.min(note.images.length, 4)}>
+        {#each note.images as src (src)}
+          <img {src} alt="" loading="lazy" decoding="async" />
+        {/each}
+      </span>
+    {/if}
+    {#if showText}
+      <span class="note-card-text">
+        {#if note.title}
+          <span class="note-title">{note.title}</span>
+        {/if}
+        {#if note.preview}
+          <span class="note-preview">{note.preview}</span>
+        {/if}
+        {#if note.labels.length > 0}
+          <span class="note-labels">
+            {#each sortLabelsCaseInsensitive(note.labels) as label (label)}
+              <span class="note-label-chip">{label}</span>
+            {/each}
+          </span>
+        {/if}
+      </span>
+    {/if}
   </button>
   {#if note.trashedAt === null}
     <span class="note-card-actions">
@@ -113,6 +126,41 @@
 
   .note-card-open:focus-visible {
     outline-offset: -2px;
+  }
+
+  .note-card-images {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    height: 160px;
+    overflow: hidden;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .note-card-images[data-count='2'] {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .note-card-images[data-count='3'],
+  .note-card-images[data-count='4'] {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .note-card-images[data-count='3'] img:first-child {
+    grid-row: span 2;
+  }
+
+  /* Zero minimums stop intrinsic image sizes from stretching the grid tracks. */
+  .note-card-images img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    object-fit: cover;
+    background: var(--surface-muted);
   }
 
   .note-card-text {
