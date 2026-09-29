@@ -181,6 +181,14 @@ describe('archive and pin interaction', () => {
   })
 })
 
+function putSettings(env: Parameters<typeof call>[0], body: Record<string, unknown>): Promise<Response> {
+  return call(env, '/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 describe('settings', () => {
   it('GET returns the defaults when nothing has been saved', async () => {
     const env = createTestEnv()
@@ -215,5 +223,43 @@ describe('settings', () => {
       body: JSON.stringify({ folderSort: 'bogus' }),
     })
     expect(response.status).toBe(400)
+  })
+
+  it('GET reports the default trash retention when nothing has been saved', async () => {
+    const env = createTestEnv()
+    const body = (await (await call(env, '/api/settings')).json()) as AppSettings
+    expect(body.trashRetentionDays).toBe(30)
+  })
+
+  it('PUT stores trashRetentionDays and leaves the other keys alone', async () => {
+    const env = createTestEnv()
+    const put = await putSettings(env, { trashRetentionDays: 7 })
+    expect(put.status).toBe(200)
+    const body = (await (await call(env, '/api/settings')).json()) as AppSettings
+    expect(body).toEqual({ ...DEFAULT_SETTINGS, trashRetentionDays: 7 })
+  })
+
+  it('PUT keeps an explicit null instead of falling back to the default', async () => {
+    const env = createTestEnv()
+    expect((await putSettings(env, { trashRetentionDays: null })).status).toBe(200)
+    const body = (await (await call(env, '/api/settings')).json()) as AppSettings
+    expect(body.trashRetentionDays).toBeNull()
+  })
+
+  it.each([0, -1, 1.5, '30', 3651])('rejects trashRetentionDays %j with 400', async (value) => {
+    const env = createTestEnv()
+    expect((await putSettings(env, { trashRetentionDays: value })).status).toBe(400)
+    const body = (await (await call(env, '/api/settings')).json()) as AppSettings
+    expect(body.trashRetentionDays).toBe(30)
+  })
+
+  it('fills in the default retention for a row saved before the key existed', async () => {
+    const env = createTestEnv()
+    await env.DB.prepare('INSERT INTO settings (owner, data, updated_at) VALUES (?, ?, ?)')
+      .bind('dev@localhost', JSON.stringify({ defaultFormat: 'syntax' }), Date.now())
+      .run()
+    const body = (await (await call(env, '/api/settings')).json()) as AppSettings
+    expect(body.defaultFormat).toBe('syntax')
+    expect(body.trashRetentionDays).toBe(30)
   })
 })

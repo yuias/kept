@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import { isConcreteFormat } from '../../shared/format'
-import { DEFAULT_SETTINGS, type AppSettings, type FolderSort } from '../../shared/types'
+import { isTrashRetentionDays } from '../../shared/retention'
+import type { AppSettings, FolderSort } from '../../shared/types'
 import { requireIdentity } from '../auth'
 import { ApiException, ownerOf, readJson, type HonoEnv } from '../http'
+import { loadSettings } from '../settings-repo'
 
 export const settingsRoutes = new Hono<HonoEnv>()
 
@@ -17,18 +19,6 @@ function asObject(value: unknown): Record<string, unknown> {
     throw new ApiException(400, 'bad_request', 'body must be a JSON object')
   }
   return value as Record<string, unknown>
-}
-
-interface SettingsRow {
-  data: string
-}
-
-async function loadSettings(db: D1Database, owner: string): Promise<AppSettings> {
-  const row = await db.prepare('SELECT data FROM settings WHERE owner = ?').bind(owner).first<SettingsRow>()
-  if (!row) return { ...DEFAULT_SETTINGS }
-  // Merge over the defaults so a settings row written before a new key
-  // existed still reports a complete AppSettings.
-  return { ...DEFAULT_SETTINGS, ...(JSON.parse(row.data) as Partial<AppSettings>) }
 }
 
 settingsRoutes.get('/api/settings', requireIdentity, async (c) => {
@@ -54,6 +44,12 @@ settingsRoutes.put('/api/settings', requireIdentity, async (c) => {
       throw new ApiException(400, 'bad_request', 'folderSort must be one of name, created, updated, manual')
     }
     next.folderSort = raw.folderSort
+  }
+  if ('trashRetentionDays' in raw) {
+    if (!isTrashRetentionDays(raw.trashRetentionDays)) {
+      throw new ApiException(400, 'bad_request', 'trashRetentionDays must be null or an integer from 1 to 3650')
+    }
+    next.trashRetentionDays = raw.trashRetentionDays
   }
 
   await c.env.DB.prepare(
