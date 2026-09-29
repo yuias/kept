@@ -29,3 +29,7 @@ export const REGEX_SCAN_CHARS_MAX = 4_000_000
 // Bounds the text one regex test sees, since the scan guards cap only the total.
 export const REGEX_ROW_CHARS_MAX = 20_000
 export const REGEX_SCAN_BATCH_SIZE = 200
+
+export const CARD_IMAGES_MAX = 4
+// Slice of `body`, starting at the first `![`, scanned for card images.
+export const IMAGE_HEAD_CHARS = 2000

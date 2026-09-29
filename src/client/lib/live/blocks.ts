@@ -13,6 +13,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, type Extension, Facet, type Range, StateField, type Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
+import { isLocalImageUrl } from '../../../shared/images'
 import { activeLineNumbers, MARKER_CLASS } from './decorations'
 
 export type BlockSpec =
@@ -42,13 +43,9 @@ export interface TextEdit {
   insert: string
 }
 
-// Only images this app serves. Anything else stays as source text so the
-// editor never fetches arbitrary external URLs (tracking, mixed content).
-const LOCAL_IMAGE = /^\/img\/[\w-]+$/
-
 /** The URL to load for an image target, or null when it must not be rendered. */
 export function localImageSrc(url: string): string | null {
-  return LOCAL_IMAGE.test(url) ? url : null
+  return isLocalImageUrl(url) ? url : null
 }
 
 /** The edit that flips a `[ ]` / `[x]` marker starting at `from`, or null if `marker` is not one. */
