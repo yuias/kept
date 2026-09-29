@@ -1,8 +1,11 @@
 import { HTTPException } from 'hono/http-exception'
 import { isNoteFormat } from '../shared/format'
+import { extractImageUrls } from '../shared/images'
 import { asciiLower, normalizeLabels, sortLabelsCaseInsensitive } from '../shared/labels'
 import {
   BODY_MAX_BYTES,
+  CARD_IMAGES_MAX,
+  IMAGE_HEAD_CHARS,
   PREVIEW_CHARS,
   REGEX_ROW_CHARS_MAX,
   REGEX_SCAN_BATCH_SIZE,
@@ -44,6 +47,7 @@ interface NoteListRow {
   created_at: number
   updated_at: number
   preview: string
+  image_head: string
   labels_json: string | null
 }
 
@@ -81,6 +85,7 @@ function toNoteSummary(row: NoteListRow): NoteSummary {
     id: row.id,
     title: row.title,
     preview: row.preview,
+    images: extractImageUrls(row.image_head, CARD_IMAGES_MAX),
     format: row.format,
     folderId: row.folder_id,
     labels: parseLabelsJson(row.labels_json),
@@ -636,6 +641,9 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
 
     const sql = `SELECT id, folder_id, title, format, pinned, archived, trashed_at, created_at, updated_at,
       substr(body_plain, 1, ${PREVIEW_CHARS}) AS preview,
+      CASE WHEN instr(body, '](/img/') > 0
+           THEN substr(body, instr(body, '!['), ${IMAGE_HEAD_CHARS})
+           ELSE '' END AS image_head,
       ${LABELS_JSON_SUBQUERY}${scan ? `, ${scan.sql}` : ''}
     FROM notes n
     WHERE ${rowConditions.join(' AND ')}

@@ -20,6 +20,8 @@ export interface NoteSummary {
   id: string
   title: string
   preview: string
+  /** Up to CARD_IMAGES_MAX local image URLs from the body, for the card preview. */
+  images: string[]
   format: NoteFormat
   folderId: string | null
   labels: string[]
@@ -30,7 +32,7 @@ export interface NoteSummary {
   updatedAt: number
 }
 
-export interface Note extends Omit<NoteSummary, 'preview'> {
+export interface Note extends Omit<NoteSummary, 'preview' | 'images'> {
   body: string
   summary: string | null
 }

@@ -29,6 +29,15 @@ async function titles(env: Env, q: string): Promise<string[]> {
 afterEach(() => setRegexScanLimitsForTest(null))
 
 describe('regex search', () => {
+  it('returns the local images of a matching note', async () => {
+    const env = createTestEnv()
+    await createNote(env, { title: 'pics', body: 'intro\n\n![](/img/a1)\n\n![](https://example.com/c.png)' })
+
+    const { items } = await search(env, '/intro/')
+    expect(items).toHaveLength(1)
+    expect(items[0]?.images).toEqual(['/img/a1'])
+  })
+
   it('matches in the title and in the body', async () => {
     const env = createTestEnv()
     await createNote(env, { title: 'invoice-2024', body: '' })

@@ -305,3 +305,42 @@ describe('GET /api/notes list', () => {
     expect(body.items.length).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('GET /api/notes card images', () => {
+  const list = async (env: Parameters<typeof call>[0]): Promise<NoteListResponse> =>
+    (await (await call(env, '/api/notes')).json()) as NoteListResponse
+
+  it('lists local image URLs in document order and skips external images', async () => {
+    const env = createTestEnv()
+    await createNote(env, {
+      title: 'pics',
+      body: 'intro\n\n![](/img/a1)\n\n![x](/img/b2 "t")\n\n![](https://example.com/c.png)',
+    })
+
+    expect((await list(env)).items[0]?.images).toEqual(['/img/a1', '/img/b2'])
+  })
+
+  it('lists an empty images array for a note without local images', async () => {
+    const env = createTestEnv()
+    await createNote(env, { title: 'plain', body: 'no pictures ![](https://example.com/c.png)' })
+
+    expect((await list(env)).items[0]?.images).toEqual([])
+  })
+
+  it('caps the images at four', async () => {
+    const env = createTestEnv()
+    const body = [1, 2, 3, 4, 5].map((n) => `![](/img/i${n})`).join('\n\n')
+    await createNote(env, { title: 'many', body })
+
+    expect((await list(env)).items[0]?.images).toEqual(['/img/i1', '/img/i2', '/img/i3', '/img/i4'])
+  })
+
+  it('does not include images in the single-note response', async () => {
+    const env = createTestEnv()
+    const created = await createNote(env, { title: 'pics', body: '![](/img/a1)' })
+
+    const response = await call(env, `/api/notes/${created.id}`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).not.toHaveProperty('images')
+  })
+})
