@@ -16,6 +16,7 @@
   import { openNote } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
+  import Icon from './Icon.svelte'
   import ImageUrlDialog from './ImageUrlDialog.svelte'
   import type LiveEditor from './LiveEditor.svelte'
 
@@ -41,6 +42,9 @@
   let body = $state('')
   let format = $state<NoteFormat>('inherit')
   let currentFolderId = $state<string | null>(initialFolderId)
+  const currentFolderName = $derived(
+    currentFolderId ? (folderById(currentFolderId)?.name ?? m.folders.noFolder) : m.folders.noFolder,
+  )
   let pickingFolder = $state(false)
   let labelsText = $state('')
   // The last set confirmed by the server, used to decide whether an edit to
@@ -542,7 +546,9 @@
     <p class="note-editor-status error">{loadError}</p>
     <div class="note-editor-actions">
       <span class="note-editor-spacer"></span>
-      <button type="button" onclick={requestClose}>{m.editor.close}</button>
+      <button type="button" class="icon-button" aria-label={m.editor.close} title={m.editor.close} onclick={requestClose}>
+        <Icon name="close" />
+      </button>
     </div>
   {:else}
     <input
@@ -624,29 +630,85 @@
 
     <div class="note-editor-actions">
       {#if readOnly}
-        <button type="button" onclick={restore}>{m.editor.restore}</button>
-        <button type="button" class="danger" onclick={deleteForever}>{m.editor.deleteForever}</button>
-      {:else}
-        <button type="button" disabled={!noteId} onclick={togglePinned}>
-          {pinned ? m.editor.unpin : m.editor.pin}
-        </button>
-        <button type="button" disabled={!noteId} onclick={toggleArchived}>
-          {archived ? m.editor.unarchive : m.editor.archive}
+        <button type="button" class="icon-button" aria-label={m.editor.restore} title={m.editor.restore} onclick={restore}>
+          <Icon name="restore" />
         </button>
         <button
           type="button"
+          class="icon-button danger"
+          aria-label={m.editor.deleteForever}
+          title={m.editor.deleteForever}
+          onclick={deleteForever}
+        >
+          <Icon name="deleteForever" />
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="icon-button"
           disabled={!noteId}
-          title={currentFolderId ? folderById(currentFolderId)?.name : m.folders.noFolder}
+          aria-label={pinned ? m.editor.unpin : m.editor.pin}
+          title={pinned ? m.editor.unpin : m.editor.pin}
+          aria-pressed={pinned}
+          onclick={togglePinned}
+        >
+          <Icon name="pin" filled={pinned} />
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          disabled={!noteId}
+          aria-label={archived ? m.editor.unarchive : m.editor.archive}
+          title={archived ? m.editor.unarchive : m.editor.archive}
+          onclick={toggleArchived}
+        >
+          <Icon name={archived ? 'unarchive' : 'archive'} />
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          disabled={!noteId}
+          aria-label={m.editor.moveTo}
+          title={m.editor.moveToCurrent(currentFolderName)}
           onclick={() => (pickingFolder = true)}
         >
-          {m.editor.moveTo}
+          <Icon name="move" />
         </button>
-        <button type="button" disabled={!noteId} onclick={moveToTrash}>{m.editor.trash}</button>
+        <button
+          type="button"
+          class="icon-button"
+          disabled={!noteId}
+          aria-label={m.editor.trash}
+          title={m.editor.trash}
+          onclick={moveToTrash}
+        >
+          <Icon name="trash" />
+        </button>
       {/if}
-      <button type="button" disabled={!noteId} onclick={viewRaw}>{m.editor.viewRaw}</button>
-      <button type="button" disabled={!noteId} onclick={downloadRaw}>{m.editor.downloadMarkdown}</button>
+      <button
+        type="button"
+        class="icon-button"
+        disabled={!noteId}
+        aria-label={m.editor.viewRaw}
+        title={m.editor.viewRaw}
+        onclick={viewRaw}
+      >
+        <Icon name="viewRaw" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        disabled={!noteId}
+        aria-label={m.editor.downloadMarkdown}
+        title={m.editor.downloadMarkdown}
+        onclick={downloadRaw}
+      >
+        <Icon name="download" />
+      </button>
       <span class="note-editor-spacer"></span>
-      <button type="button" onclick={requestClose}>{m.editor.close}</button>
+      <button type="button" class="icon-button" aria-label={m.editor.close} title={m.editor.close} onclick={requestClose}>
+        <Icon name="close" />
+      </button>
     </div>
   {/if}
 </dialog>
@@ -727,7 +789,7 @@
   .note-editor-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     flex-wrap: wrap;
   }
 
@@ -737,6 +799,5 @@
 
   .note-editor-actions .danger {
     color: var(--danger);
-    border-color: var(--danger);
   }
 </style>

@@ -112,6 +112,7 @@ export const en = {
     unarchive: 'Unarchive note',
     trash: 'Move to trash',
     moveTo: 'Move to…',
+    moveToCurrent: (folder: string) => `Move to… (current: ${folder})`,
     restore: 'Restore',
     deleteForever: 'Delete forever',
     deleteForeverConfirm: 'Delete this note forever? This cannot be undone.',

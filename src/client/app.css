@@ -154,6 +154,32 @@ button.ghost {
   color: var(--text-muted);
 }
 
+button.icon-button {
+  padding: 6px;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+button.icon-button:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+button.icon-button[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+button.icon-button.danger {
+  color: var(--danger);
+}
+
+.icon {
+  display: block;
+  flex-shrink: 0;
+}
+
 input[type='text'],
 input[type='search'],
 textarea,

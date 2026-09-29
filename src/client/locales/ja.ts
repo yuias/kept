@@ -105,6 +105,7 @@ export const ja: Messages = {
     unarchive: 'アーカイブを解除',
     trash: 'ゴミ箱に移動',
     moveTo: '移動先…',
+    moveToCurrent: (folder: string) => `移動先…（現在: ${folder}）`,
     restore: '復元',
     deleteForever: '完全に削除',
     deleteForeverConfirm: 'このノートを完全に削除しますか？元に戻せません。',
