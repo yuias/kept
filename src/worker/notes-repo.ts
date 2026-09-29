@@ -277,7 +277,6 @@ export async function updateNote(
     setClauses.push('format = ?')
     setBindings.push(input.format)
     formatTarget = input.format
-    contentChanged = true
   }
 
   // Archive first, then pin: archiving clears pinned, and pinning an
@@ -303,7 +302,7 @@ export async function updateNote(
     setBindings.push(setPinned)
   }
 
-  // Pin/archive/trash/restore leave updated_at alone; only content-shaped
+  // Pin/archive/format/trash/restore leave updated_at alone; only content-shaped
   // changes bump it.
   if (contentChanged) {
     setClauses.push('updated_at = ?')

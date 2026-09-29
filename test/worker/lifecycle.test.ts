@@ -64,7 +64,7 @@ describe('trash and restore', () => {
     expect(trashListAfterRestore.items.map((item) => item.id)).not.toContain(note.id)
   })
 
-  it('leaves updated_at unchanged after pin, trash and restore', async () => {
+  it('leaves updated_at unchanged after pin, format, trash and restore', async () => {
     const env = createTestEnv()
     const note = await createNote(env, { title: 'x' })
 
@@ -77,6 +77,12 @@ describe('trash and restore', () => {
     expect(pinResponse.status).toBe(200)
     expect(((await pinResponse.json()) as Note).updatedAt).toBe(1000)
 
+    const formatResponse = await patchNote(env, note.id, { format: 'syntax' })
+    expect(formatResponse.status).toBe(200)
+    const formatted = (await formatResponse.json()) as Note
+    expect(formatted.format).toBe('syntax')
+    expect(formatted.updatedAt).toBe(1000)
+
     const trashResponse = await trashNote(env, note.id)
     expect(trashResponse.status).toBe(200)
     expect(((await trashResponse.json()) as Note).updatedAt).toBe(1000)
@@ -84,6 +90,16 @@ describe('trash and restore', () => {
     const restoreResponse = await restoreNote(env, note.id)
     expect(restoreResponse.status).toBe(200)
     expect(((await restoreResponse.json()) as Note).updatedAt).toBe(1000)
+  })
+
+  it('still bumps updated_at when a format change is combined with a title change', async () => {
+    const env = createTestEnv()
+    const note = await createNote(env, { title: 'x' })
+    await env.DB.prepare('UPDATE notes SET updated_at = 1000 WHERE id = ?').bind(note.id).run()
+
+    const response = await patchNote(env, note.id, { format: 'formatted', title: 'y' })
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as Note).updatedAt).toBeGreaterThan(1000)
   })
 
   it('returns 409 note_trashed when PATCHing a trashed note', async () => {
