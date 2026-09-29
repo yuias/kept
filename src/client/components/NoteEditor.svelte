@@ -632,8 +632,8 @@
 
 <style>
   .note-editor {
-    width: min(680px, 92vw);
-    max-height: 85vh;
+    width: min(900px, 92vw);
+    max-height: 90vh;
     padding: 16px;
     display: flex;
     flex-direction: column;
