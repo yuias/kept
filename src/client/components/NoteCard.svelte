@@ -45,6 +45,9 @@
     text-align: left;
     white-space: normal;
     align-items: flex-start;
+    overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .note-card:hover {
@@ -58,12 +61,16 @@
   .note-title {
     font-weight: 600;
     color: var(--text);
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .note-labels {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+    max-width: 100%;
   }
 
   .note-label-chip {
@@ -72,6 +79,9 @@
     background: var(--surface-muted);
     color: var(--text-muted);
     font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .note-preview {
@@ -83,5 +93,8 @@
     white-space: pre-line;
     color: var(--text-muted);
     font-size: 0.9rem;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    min-width: 0;
   }
 </style>
