@@ -69,6 +69,10 @@ export const en = {
     sortManual: 'Manual',
     language: 'Language',
     languageAuto: 'Auto',
+    trashRetention: 'Delete notes in the trash after',
+    trashRetentionDays: (days: number) => (days === 1 ? '1 day' : `${days} days`),
+    trashRetentionNever: 'Never',
+    trashRetentionHint: 'Checked once a day. Deleted notes cannot be restored.',
     saved: 'Saved',
   },
   search: {

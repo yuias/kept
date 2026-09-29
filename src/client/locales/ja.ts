@@ -62,6 +62,10 @@ export const ja: Messages = {
     sortManual: '手動',
     language: '言語',
     languageAuto: '自動',
+    trashRetention: 'ゴミ箱のノートを完全に削除するまでの期間',
+    trashRetentionDays: (days: number) => `${days}日`,
+    trashRetentionNever: '自動で削除しない',
+    trashRetentionHint: '1日1回確認します。削除したノートは元に戻せません。',
     saved: '保存しました',
   },
   search: {

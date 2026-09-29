@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TRASH_RETENTION_PRESETS } from '../../shared/retention'
   import type { AppSettings, ConcreteFormat, FolderSort } from '../../shared/types'
   import { describeApiError } from '../lib/errors'
   import { LOCALES, localeOverride, messages, setLocaleOverride, type Locale } from '../lib/i18n.svelte'
@@ -9,6 +10,13 @@
   const m = $derived(messages())
   const current = $derived(settings())
   const override = $derived(localeOverride())
+
+  // Keep a stored non-preset value (the API accepts any 1..3650) selectable.
+  const retentionOptions = $derived.by(() => {
+    const days = current.trashRetentionDays
+    const options = days !== null && !TRASH_RETENTION_PRESETS.includes(days) ? [...TRASH_RETENTION_PRESETS, days] : [...TRASH_RETENTION_PRESETS]
+    return options.sort((a, b) => a - b)
+  })
 
   let error = $state<string | null>(null)
   let saved = $state(false)
@@ -33,6 +41,11 @@
 
   function handleSort(event: Event): void {
     void save({ folderSort: (event.currentTarget as HTMLSelectElement).value as FolderSort })
+  }
+
+  function handleRetention(event: Event): void {
+    const value = (event.currentTarget as HTMLSelectElement).value
+    void save({ trashRetentionDays: value === 'never' ? null : Number(value) })
   }
 
   // Per-browser only: localStorage, never sent to the Worker.
@@ -61,6 +74,21 @@
       <option value="updated">{m.settings.sortUpdated}</option>
       <option value="manual">{m.settings.sortManual}</option>
     </select>
+  </div>
+
+  <div class="field">
+    <label for="settings-trash-retention">{m.settings.trashRetention}</label>
+    <select
+      id="settings-trash-retention"
+      value={current.trashRetentionDays === null ? 'never' : String(current.trashRetentionDays)}
+      onchange={handleRetention}
+    >
+      {#each retentionOptions as days (days)}
+        <option value={String(days)}>{m.settings.trashRetentionDays(days)}</option>
+      {/each}
+      <option value="never">{m.settings.trashRetentionNever}</option>
+    </select>
+    <p class="hint">{m.settings.trashRetentionHint}</p>
   </div>
 
   <div class="field">
@@ -99,6 +127,12 @@
 
   .field label {
     font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .hint {
+    margin: 0;
+    font-size: 0.82rem;
     color: var(--text-muted);
   }
 
