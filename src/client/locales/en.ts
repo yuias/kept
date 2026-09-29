@@ -86,7 +86,7 @@ export const en = {
   notes: {
     pinned: 'Pinned',
     others: 'Others',
-    pinnedIndicator: 'Pinned',
+    untitledNote: 'Untitled note',
     loadMore: 'Load more',
     loading: 'Loading…',
     emptyNotes: 'No notes yet.',

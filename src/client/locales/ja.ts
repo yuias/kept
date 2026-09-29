@@ -79,7 +79,7 @@ export const ja: Messages = {
   notes: {
     pinned: 'ピン留め',
     others: 'その他',
-    pinnedIndicator: 'ピン留め済み',
+    untitledNote: '無題のノート',
     loadMore: 'もっと読み込む',
     loading: '読み込み中…',
     emptyNotes: 'ノートはまだありません。',

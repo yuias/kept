@@ -1,8 +1,16 @@
 <script lang="ts">
-  import type { NoteSummary } from '../../shared/types'
+  import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
   import NoteCard from './NoteCard.svelte'
 
-  let { notes, onopen }: { notes: NoteSummary[]; onopen: (id: string) => void } = $props()
+  let {
+    notes,
+    onopen,
+    onupdate,
+  }: {
+    notes: NoteSummary[]
+    onopen: (id: string) => void
+    onupdate: (id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived'>) => Promise<void>
+  } = $props()
 
   let container: HTMLDivElement | undefined
   let width = $state(0)
@@ -31,7 +39,7 @@
   {#each buckets as bucket, i (i)}
     <div class="note-column">
       {#each bucket as note (note.id)}
-        <NoteCard {note} {onopen} />
+        <NoteCard {note} {onopen} {onupdate} />
       {/each}
     </div>
   {/each}

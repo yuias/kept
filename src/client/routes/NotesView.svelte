@@ -1,9 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import type { NoteSummary } from '../../shared/types'
+  import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
   import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
-  import { emptyTrash as emptyTrashRequest, listNotes } from '../lib/api'
+  import { emptyTrash as emptyTrashRequest, listNotes, updateNote } from '../lib/api'
   import { describeApiError } from '../lib/errors'
   import { folderById } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
@@ -28,6 +28,9 @@
   let nextCursor = $state<string | null>(null)
   let loading = $state(false)
   let loadingMore = $state(false)
+  // Set for every load, including quiet ones; a page fetched with the old
+  // cursor must not be appended to a first page that is about to be replaced.
+  let reloading = $state(false)
   let error = $state<string | null>(null)
 
   // `query` is a fresh object on every render (it is derived from route state
@@ -38,10 +41,13 @@
   // Discards a response that arrives after a newer load has started.
   let generation = 0
 
-  async function load(): Promise<void> {
+  // `quiet` keeps the current grid on screen instead of flashing the loading
+  // state, for reloads triggered by an in-place action.
+  async function load(options: { quiet?: boolean } = {}): Promise<void> {
     const gen = ++generation
     const { view, folder, label, q } = query
-    loading = true
+    if (!options.quiet) loading = true
+    reloading = true
     error = null
     try {
       const response = await listNotes({ view, folder, label, q })
@@ -52,7 +58,10 @@
       if (gen !== generation) return
       error = describeApiError(e, m)
     } finally {
-      if (gen === generation) loading = false
+      if (gen === generation) {
+        loading = false
+        reloading = false
+      }
     }
   }
 
@@ -64,7 +73,7 @@
   })
 
   async function loadMore(): Promise<void> {
-    if (!nextCursor || loadingMore) return
+    if (!nextCursor || loadingMore || reloading) return
     const gen = generation
     const { view, folder, label, q } = query
     loadingMore = true
@@ -81,6 +90,18 @@
       // a view switch must not leave the button disabled for the new view.
       loadingMore = false
     }
+  }
+
+  async function updateFromCard(id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived'>): Promise<void> {
+    const gen = generation
+    try {
+      await updateNote(id, patch)
+    } catch (e) {
+      if (gen !== generation) return
+      error = describeApiError(e, m)
+      return
+    }
+    await load({ quiet: true })
   }
 
   async function handleEmptyTrash(): Promise<void> {
@@ -145,25 +166,25 @@
   {:else if query.view === 'notes'}
     {#if pinned.length > 0}
       <h2 class="notes-heading">{m.notes.pinned}</h2>
-      <NoteGrid notes={pinned} onopen={openNote} />
+      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} />
       {#if others.length > 0}
         <h2 class="notes-heading">{m.notes.others}</h2>
       {/if}
     {/if}
-    <NoteGrid notes={others} onopen={openNote} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} />
   {:else}
-    <NoteGrid notes={others} onopen={openNote} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} />
   {/if}
 
   {#if nextCursor}
     <div class="notes-load-more">
-      <button type="button" disabled={loadingMore} onclick={loadMore}>{m.notes.loadMore}</button>
+      <button type="button" disabled={loadingMore || reloading} onclick={loadMore}>{m.notes.loadMore}</button>
     </div>
   {/if}
 </div>
 
 {#if noteId}
-  <NoteEditor id={noteId} folderId={query.folder ?? null} onclose={() => openNote(null)} onsettled={load} />
+  <NoteEditor id={noteId} folderId={query.folder ?? null} onclose={() => openNote(null)} onsettled={() => load()} />
 {/if}
 
 <style>
