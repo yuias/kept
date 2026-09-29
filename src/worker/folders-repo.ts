@@ -1,6 +1,6 @@
 import { canCreateUnder, checkMove, type FolderLink } from '../shared/folder-tree'
 import { FOLDER_NAME_MAX_CHARS } from '../shared/limits'
-import type { CreateFolderInput, Folder, UpdateFolderInput } from '../shared/types'
+import type { CreateFolderInput, Folder, ReorderFoldersInput, UpdateFolderInput } from '../shared/types'
 import { ApiException } from './http'
 import { generateId } from './id'
 
@@ -149,6 +149,44 @@ export async function updateFolder(
   }
 
   return getFolder(db, owner, id)
+}
+
+/**
+ * Sets `sort_order = index` for exactly the sibling set of `parentId`. Any id
+ * or parent that is not this owner's folder is 404 (indistinguishable from
+ * another owner's); a duplicate, missing or extra sibling is 400. `updated_at`
+ * is left alone: reordering is not an edit of the folder itself.
+ */
+export async function reorderFolders(db: D1Database, owner: string, input: ReorderFoldersInput): Promise<void> {
+  const { parentId, ids } = input
+  const { results } = await db
+    .prepare('SELECT id, parent_id FROM folders WHERE owner = ?')
+    .bind(owner)
+    .all<{ id: string; parent_id: string | null }>()
+  const rows = results ?? []
+  const byId = new Map(rows.map((row) => [row.id, row]))
+
+  if (parentId !== null && !byId.has(parentId)) {
+    throw new ApiException(404, 'not_found', 'parent folder not found')
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new ApiException(400, 'bad_request', 'ids must not contain duplicates')
+  }
+  for (const id of ids) {
+    if (!byId.has(id)) throw new ApiException(404, 'not_found', 'folder not found')
+  }
+
+  const siblings = rows.filter((row) => row.parent_id === parentId)
+  const requested = new Set(ids)
+  if (siblings.length !== ids.length || siblings.some((row) => !requested.has(row.id))) {
+    throw new ApiException(400, 'bad_request', 'ids must be exactly the folders under parentId')
+  }
+  if (ids.length === 0) return
+
+  // `parent_id IS ?` keeps the batch from writing to a folder that was moved
+  // away after the sibling set was read above.
+  const statement = db.prepare('UPDATE folders SET sort_order = ? WHERE id = ? AND owner = ? AND parent_id IS ?')
+  await db.batch(ids.map((id, index) => statement.bind(index, id, owner, parentId)))
 }
 
 export type DeleteFolderResult = 'deleted' | 'not_found'

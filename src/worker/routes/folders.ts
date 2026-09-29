@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import type { CreateFolderInput, Folder, UpdateFolderInput } from '../../shared/types'
+import type { CreateFolderInput, Folder, ReorderFoldersInput, UpdateFolderInput } from '../../shared/types'
 import { requireIdentity } from '../auth'
-import { createFolder, deleteFolder, listFolders, updateFolder } from '../folders-repo'
+import { createFolder, deleteFolder, listFolders, reorderFolders, updateFolder } from '../folders-repo'
 import { ownerOf, readJson, type HonoEnv } from '../http'
 import { isValidId } from '../id'
 
@@ -68,6 +68,16 @@ function toUpdateInput(raw: Record<string, unknown>): UpdateFolderInput {
   return input
 }
 
+function toReorderInput(raw: Record<string, unknown>): ReorderFoldersInput {
+  if (!('parentId' in raw)) throw new HTTPException(400, { message: 'parentId must be a string or null' })
+  const parentId = requireNullableString(raw, 'parentId')
+  const { ids } = raw
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) {
+    throw new HTTPException(400, { message: 'ids must be an array of strings' })
+  }
+  return { parentId, ids: ids as string[] }
+}
+
 foldersRoutes.get('/api/folders', requireIdentity, async (c) => {
   const owner = ownerOf(c)
   const folders = await listFolders(c.env.DB, owner)
@@ -80,6 +90,14 @@ foldersRoutes.post('/api/folders', requireIdentity, async (c) => {
   const input = toCreateInput(asObject(await readJson(c.req.raw)))
   const folder = await createFolder(c.env.DB, owner, input)
   return c.json(folder satisfies Folder, 201)
+})
+
+foldersRoutes.post('/api/folders/reorder', requireIdentity, async (c) => {
+  checkContentLength(c.req.raw)
+  const owner = ownerOf(c)
+  const input = toReorderInput(asObject(await readJson(c.req.raw)))
+  await reorderFolders(c.env.DB, owner, input)
+  return c.body(null, 204)
 })
 
 foldersRoutes.patch('/api/folders/:id', requireIdentity, async (c) => {
