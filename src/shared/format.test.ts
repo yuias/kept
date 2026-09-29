@@ -27,7 +27,11 @@ describe('canChangeFormat', () => {
 })
 
 describe('effectiveFormat', () => {
-  const settings: AppSettings = { defaultFormat: 'syntax', folderSort: 'name' }
+  const settings: AppSettings = {
+    defaultFormat: 'syntax',
+    folderSort: 'name',
+    trashRetentionDays: 30,
+  }
 
   it('maps inherit to the default format', () => {
     expect(effectiveFormat('inherit', settings)).toBe('syntax')

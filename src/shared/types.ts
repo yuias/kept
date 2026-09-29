@@ -1,3 +1,5 @@
+import { TRASH_RETENTION_DEFAULT_DAYS } from './retention'
+
 export type NoteFormat = 'inherit' | 'formatted' | 'syntax'
 export type ConcreteFormat = Exclude<NoteFormat, 'inherit'>
 export type NoteView = 'notes' | 'archive' | 'trash' | 'all'
@@ -92,9 +94,15 @@ export interface LabelCount {
 export interface AppSettings {
   defaultFormat: ConcreteFormat
   folderSort: FolderSort
+  /** Days a note stays in the trash before the daily purge deletes it; null = never. */
+  trashRetentionDays: number | null
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { defaultFormat: 'formatted', folderSort: 'name' }
+export const DEFAULT_SETTINGS: AppSettings = {
+  defaultFormat: 'formatted',
+  folderSort: 'name',
+  trashRetentionDays: TRASH_RETENTION_DEFAULT_DAYS,
+}
 
 export interface ImageUploadResponse {
   id: string
