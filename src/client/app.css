@@ -349,3 +349,35 @@ dialog {
 dialog::backdrop {
   background: color-mix(in srgb, var(--bg) 55%, transparent);
 }
+
+.popup-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px color-mix(in srgb, black 20%, transparent);
+}
+
+.popup-menu button {
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.popup-menu button:hover {
+  background: var(--surface-muted);
+  border-color: transparent;
+}
+
+.popup-menu button.danger {
+  color: var(--danger);
+}

@@ -15,6 +15,7 @@
     toggleFolderExpanded,
   } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
   import { currentRoute, navigate, link } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
@@ -28,11 +29,8 @@
   const m = $derived(messages())
   const route = $derived(currentRoute())
 
-  // Which node's "..." menu is open, and which node (if any) has its move
-  // picker open. State is per recursive instance, so a menu opened at
-  // another nesting level stays open too; acceptable for a small sidebar
-  // menu, where at most one is likely to be open at a time in practice.
-  let menuFor = $state<string | null>(null)
+  // Which node (if any) has its move picker open; per recursive instance. The
+  // open "..." menu is app-wide state in lib/menu.svelte.
   let movingFolder = $state<Folder | null>(null)
 
   const moveDisabledIds = $derived(movingFolder ? disabledMoveTargets(movingFolder.id) : [])
@@ -43,19 +41,15 @@
     await createFolder(name.trim(), parentId)
   }
 
-  function toggleMenu(id: string): void {
-    menuFor = menuFor === id ? null : id
-  }
-
   async function handleRename(folder: Folder): Promise<void> {
-    menuFor = null
+    closeMenu()
     const name = window.prompt(m.folders.renamePrompt, folder.name)
     if (!name || !name.trim() || name.trim() === folder.name) return
     await renameFolder(folder.id, name.trim())
   }
 
   function handleMoveClick(folder: Folder): void {
-    menuFor = null
+    closeMenu()
     movingFolder = folder
   }
 
@@ -78,7 +72,7 @@
 
   function handleDragStart(event: DragEvent, id: string): void {
     dragId = id
-    menuFor = null
+    closeMenu()
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move'
       // Firefox does not start a drag without data.
@@ -126,7 +120,7 @@
   }
 
   async function handleDelete(folder: Folder): Promise<void> {
-    menuFor = null
+    closeMenu()
     if (!window.confirm(m.folders.deleteConfirm(folder.name))) return
     const ok = await removeFolder(folder.id)
     // Its notes and subfolders moved to the parent, so a route pointing at
@@ -185,18 +179,20 @@
         >
           +
         </button>
-        <div class="folder-menu-wrap">
+        <div class="folder-menu-wrap" use:menuRoot={`folder:${node.folder.id}`}>
           <button
             type="button"
             class="folder-menu-trigger"
             aria-label={m.folders.actions}
             title={m.folders.actions}
-            onclick={() => toggleMenu(node.folder.id)}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen(`folder:${node.folder.id}`)}
+            onclick={() => toggleMenu(`folder:${node.folder.id}`)}
           >
             ⋯
           </button>
-          {#if menuFor === node.folder.id}
-            <div class="folder-menu" role="menu">
+          {#if isMenuOpen(`folder:${node.folder.id}`)}
+            <div class="popup-menu" role="menu">
               <button type="button" role="menuitem" onclick={() => handleRename(node.folder)}>
                 {m.folders.rename}
               </button>
@@ -303,37 +299,6 @@
     color: var(--text-muted);
     cursor: pointer;
     padding: 2px 6px;
-  }
-
-  .folder-menu {
-    position: absolute;
-    right: 0;
-    top: 100%;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 120px;
-    padding: 4px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: 0 4px 12px color-mix(in srgb, black 20%, transparent);
-  }
-
-  .folder-menu button {
-    border: 0;
-    background: none;
-    text-align: left;
-    padding: 6px 8px;
-  }
-
-  .folder-menu button:hover {
-    background: var(--surface-muted);
-    border-color: transparent;
-  }
-
-  .folder-menu button.danger {
-    color: var(--danger);
   }
 
   .folder-children {
