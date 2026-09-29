@@ -29,8 +29,10 @@
   // the weekday here is the day before the one the schedule reads as locally.
   // Cloudflare numbers weekdays 1 = Sunday through 7 = Saturday, which is off
   // by one from most cron systems; the abbreviation sidesteps the ambiguity.
+  // The second entry is the daily trash purge at JST 03:00 (18:00 UTC). It must
+  // equal TRASH_PURGE_CRON in src/worker/scheduled.ts, or nothing is purged.
   "triggers": {
-    "crons": ["0 21 * * SUN"]
+    "crons": ["0 21 * * SUN", "0 18 * * *"]
   },
   "r2_buckets": [
     {

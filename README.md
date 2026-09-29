@@ -138,6 +138,29 @@ valid. The only way out is signing out. `/api/me` reports this case as
 `stale: true`, and protected routes return 401 `session_stale`; the UI shows
 a sign-out link rather than a sign-in link in this state.
 
+## Trash retention
+
+Trashed notes are deleted for good once they have been in the trash longer
+than the owner's retention. It is a per-user setting on the Settings page:
+30 days by default, and "Never" turns the purge off for that user.
+
+A daily Cron Trigger, `0 18 * * *` (JST 03:00), applies each user's setting.
+Images are not deleted: the purge removes note rows only, and the R2 objects
+stay in `kept-images`.
+
+Deployments that predate this feature must copy the new cron entry from
+`wrangler.example.jsonc` into their `wrangler.jsonc`'s `triggers.crons` and run
+`pnpm deploy`; otherwise nothing is purged. The string must equal
+`TRASH_PURGE_CRON` in `src/worker/scheduled.ts`. Any other cron still runs the
+backup, so a customized backup schedule keeps working.
+
+To try it locally, backdate a trashed note and trigger the purge cron through
+`wrangler dev`:
+
+```sh
+curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+18+*+*+*"
+```
+
 ## Backup
 
 A Cron Trigger wakes the `scheduled` handler, which polls D1's export API for

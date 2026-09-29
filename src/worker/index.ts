@@ -1,16 +1,8 @@
 import { app } from './app'
-import { runBackup } from './backup'
 import type { AppEnv } from './http'
+import { runScheduled } from './scheduled'
 
-const scheduled: ExportedHandlerScheduledHandler<AppEnv> = async (controller, env) => {
-  try {
-    await runBackup(env, controller.scheduledTime)
-  } catch (error) {
-    // Nothing notifies on a failed Cron Trigger, so the log and the errored
-    // invocation in Cron Events are the only traces a failure leaves behind.
-    console.error('backup failed', error)
-    throw error
-  }
-}
+const scheduled: ExportedHandlerScheduledHandler<AppEnv> = (controller, env) =>
+  runScheduled(controller.cron, env, controller.scheduledTime)
 
 export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<AppEnv>
