@@ -6,6 +6,7 @@
   import type { ConcreteFormat, ImageUploadResponse, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
+  import { isOutsideRect } from '../lib/dialog'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
@@ -167,9 +168,42 @@
     },
   )
 
+  // A backdrop click only counts if the press also started on the backdrop, so
+  // a text-selection drag that begins inside the dialog and ends outside does
+  // not close it.
+  let pointerDownOnBackdrop = false
+
+  function isBackdropEvent(event: MouseEvent): boolean {
+    const el = dialogEl
+    if (!el) return false
+    // With showModal(), a click on the dialog's own padding also has
+    // target === dialogEl, so only a point outside its box is the backdrop.
+    return event.target === el && isOutsideRect(el.getBoundingClientRect(), event.clientX, event.clientY)
+  }
+
+  function handleDialogPointerDown(event: PointerEvent): void {
+    pointerDownOnBackdrop = event.button === 0 && isBackdropEvent(event)
+  }
+
+  function handleDialogClick(event: MouseEvent): void {
+    const started = pointerDownOnBackdrop
+    pointerDownOnBackdrop = false
+    if (!started || pickingFolder || urlDialogOpen) return
+    if (isBackdropEvent(event)) void requestClose()
+  }
+
   onMount(() => {
-    dialogEl?.showModal()
+    const el = dialogEl
+    el?.showModal()
+    // Listeners are attached here rather than in markup to avoid a11y warnings
+    // for click handlers on <dialog>; Esc already covers keyboard users.
+    el?.addEventListener('pointerdown', handleDialogPointerDown)
+    el?.addEventListener('click', handleDialogClick)
     if (initialId !== 'new') void load()
+    return () => {
+      el?.removeEventListener('pointerdown', handleDialogPointerDown)
+      el?.removeEventListener('click', handleDialogClick)
+    }
   })
 
   onDestroy(() => {
