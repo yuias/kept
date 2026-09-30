@@ -22,6 +22,8 @@ export type BlockSpec =
   | { kind: 'hide'; from: number; to: number }
   | { kind: 'checkbox'; from: number; to: number; checked: boolean }
   | { kind: 'rule'; from: number; to: number }
+  // Replaces a `-` / `*` / `+` list mark with a bullet glyph.
+  | { kind: 'bullet'; from: number; to: number }
   // Replaces the markdown source (always within one line) with the image.
   | { kind: 'image'; from: number; to: number; src: string; alt: string }
 
@@ -159,6 +161,8 @@ export function collectBlockSpecs(state: EditorState, ranges: readonly TextRange
               sameLine(mark.from, taskMarker.from)
             ) {
               emit({ kind: 'hide', from: mark.from, to: taskMarker.from })
+            } else if (isBulletMark(doc.sliceString(mark.from, mark.to)) && !lineActive(mark.from)) {
+              emit({ kind: 'bullet', from: mark.from, to: mark.to })
             } else emit({ kind: 'mark', from: mark.from, to: mark.to, className: 'cm-live-list-mark' })
             return true
           }
@@ -313,6 +317,23 @@ class ImageWidget extends WidgetType {
   }
 }
 
+class BulletWidget extends WidgetType {
+  eq(): boolean {
+    return true
+  }
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span')
+    el.className = 'cm-live-bullet'
+    el.textContent = '•'
+    return el
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
 class RuleWidget extends WidgetType {
   eq(): boolean {
     return true
@@ -331,6 +352,7 @@ class RuleWidget extends WidgetType {
 
 const hideDecoration = Decoration.replace({})
 const ruleDecoration = Decoration.replace({ widget: new RuleWidget() })
+const bulletDecoration = Decoration.replace({ widget: new BulletWidget() })
 const markCache = new Map<string, Decoration>()
 const lineCache = new Map<string, Decoration>()
 
@@ -355,6 +377,8 @@ export function buildBlockDecorations(state: EditorState, ranges: readonly TextR
         return hideDecoration.range(spec.from, spec.to)
       case 'rule':
         return ruleDecoration.range(spec.from, spec.to)
+      case 'bullet':
+        return bulletDecoration.range(spec.from, spec.to)
       case 'checkbox':
         return Decoration.replace({ widget: new CheckboxWidget(spec.checked, state.readOnly, label) }).range(
           spec.from,
@@ -433,6 +457,7 @@ export const blocksTheme = EditorView.theme({
     paddingBottom: '4px',
   },
   '.cm-live-list-mark': { color: 'var(--accent)', fontWeight: '600' },
+  '.cm-live-bullet': { color: 'var(--accent)' },
   '.cm-live-checkbox': {
     margin: '0 0.45em 0 0',
     verticalAlign: 'middle',

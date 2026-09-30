@@ -173,12 +173,20 @@ describe('task lists', () => {
     expect(kinds(specs, 'hide')).toEqual([])
   })
 
-  it('styles plain list marks', () => {
-    const specs = specsFor('- a\n- b\n\nend')
-    expect(kinds(specs, 'mark').map((s) => (s as { className: string }).className)).toEqual([
-      'cm-live-list-mark',
-      'cm-live-list-mark',
+  it('draws bullets off the cursor line and the raw mark on it', () => {
+    const doc = '- a\n* b\n+ c\n\nend'
+    const specs = specsFor(doc, 5)
+    expect(kinds(specs, 'bullet')).toEqual([
+      { kind: 'bullet', from: 0, to: 1 },
+      { kind: 'bullet', from: 8, to: 9 },
     ])
+    expect(kinds(specs, 'mark')).toEqual([{ kind: 'mark', from: 4, to: 5, className: 'cm-live-list-mark' }])
+  })
+
+  it('keeps the number of an ordered item', () => {
+    const specs = specsFor('1. a\n\nend')
+    expect(kinds(specs, 'bullet')).toEqual([])
+    expect(kinds(specs, 'mark')).toEqual([{ kind: 'mark', from: 0, to: 2, className: 'cm-live-list-mark' }])
   })
 })
 
