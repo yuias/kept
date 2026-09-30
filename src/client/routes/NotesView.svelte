@@ -214,7 +214,13 @@
 </div>
 
 {#if noteId}
-  <NoteEditor id={noteId} folderId={query.folder ?? null} onclose={() => openNote(null)} onsettled={() => load()} />
+  <NoteEditor
+    id={noteId}
+    folderId={query.folder ?? null}
+    label={query.label ?? null}
+    onclose={() => openNote(null)}
+    onsettled={() => load()}
+  />
 {/if}
 
 <style>

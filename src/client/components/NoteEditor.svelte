@@ -29,12 +29,21 @@
   const {
     id,
     folderId = null,
+    label = null,
     onclose,
     onsettled,
-  }: { id: string; folderId?: string | null; onclose: () => void; onsettled: () => void } = $props()
+  }: {
+    id: string
+    folderId?: string | null
+    label?: string | null
+    onclose: () => void
+    onsettled: () => void
+  } = $props()
   const initialId = untrack(() => id)
   // Only relevant to a brand-new note: once created, the note keeps its own folder.
   const initialFolderId = untrack(() => folderId)
+  // Same for the label being viewed: a new note starts with it filled in.
+  const initialLabel = untrack(() => (initialId === 'new' ? label : null))
 
   const m = $derived(messages())
 
@@ -51,7 +60,7 @@
     currentFolderId ? (folderById(currentFolderId)?.name ?? m.folders.noFolder) : m.folders.noFolder,
   )
   let pickingFolder = $state(false)
-  let labelsText = $state('')
+  let labelsText = $state(initialLabel ?? '')
   // The last set confirmed by the server, used to decide whether an edit to
   // `labelsText` is worth a PATCH: `labels` bumps `updated_at` unconditionally
   // server-side, so re-sending the same set on every keystroke would too.
