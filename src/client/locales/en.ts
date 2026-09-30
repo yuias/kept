@@ -42,6 +42,8 @@ export const en = {
     expand: 'Expand folder',
     collapse: 'Collapse folder',
     actions: 'Folder actions',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
     rename: 'Rename',
     renamePrompt: 'New folder name',
     move: 'Move…',

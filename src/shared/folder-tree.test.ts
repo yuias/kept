@@ -5,6 +5,7 @@ import {
   checkMove,
   depthOf,
   isDescendantOrSelf,
+  moveSibling,
   reorderSiblings,
   subtreeHeight,
 } from './folder-tree'
@@ -228,5 +229,37 @@ describe('reorderSiblings', () => {
   it('does not mutate the input', () => {
     reorderSiblings(ids, 'a', 'd', true)
     expect(ids).toEqual(['a', 'b', 'c', 'd'])
+  })
+})
+
+describe('moveSibling', () => {
+  const ids = ['a', 'b', 'c']
+
+  it('swaps with the previous sibling', () => {
+    expect(moveSibling(ids, 'b', -1)).toEqual(['b', 'a', 'c'])
+  })
+
+  it('swaps with the next sibling', () => {
+    expect(moveSibling(ids, 'b', 1)).toEqual(['a', 'c', 'b'])
+  })
+
+  it('returns null at either end', () => {
+    expect(moveSibling(ids, 'a', -1)).toBeNull()
+    expect(moveSibling(ids, 'c', 1)).toBeNull()
+  })
+
+  it('returns null for a missing id', () => {
+    expect(moveSibling(ids, 'x', -1)).toBeNull()
+    expect(moveSibling(ids, 'x', 1)).toBeNull()
+  })
+
+  it('returns null for a single-element list', () => {
+    expect(moveSibling(['a'], 'a', -1)).toBeNull()
+    expect(moveSibling(['a'], 'a', 1)).toBeNull()
+  })
+
+  it('does not mutate the input', () => {
+    moveSibling(ids, 'b', 1)
+    expect(ids).toEqual(['a', 'b', 'c'])
   })
 })

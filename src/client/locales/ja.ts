@@ -34,6 +34,8 @@ export const ja: Messages = {
     expand: 'フォルダを展開',
     collapse: 'フォルダを折りたたむ',
     actions: 'フォルダの操作',
+    moveUp: '上へ移動',
+    moveDown: '下へ移動',
     rename: '名前を変更',
     renamePrompt: '新しいフォルダ名',
     move: '移動…',

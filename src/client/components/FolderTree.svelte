@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { reorderSiblings, type FolderTreeNode } from '../../shared/folder-tree'
+  import { moveSibling, reorderSiblings, type FolderTreeNode } from '../../shared/folder-tree'
   import type { Folder } from '../../shared/types'
   import {
     canCreateSubfolder,
@@ -139,6 +139,16 @@
     if (next) await reorderFolders(nodes[0]?.folder.parentId ?? null, next)
   }
 
+  async function handleMoveSibling(id: string, direction: -1 | 1): Promise<void> {
+    closeMenu()
+    const next = moveSibling(
+      nodes.map((n) => n.folder.id),
+      id,
+      direction,
+    )
+    if (next) await reorderFolders(nodes[0]?.folder.parentId ?? null, next)
+  }
+
   async function handleDelete(folder: Folder): Promise<void> {
     closeMenu()
     if (!window.confirm(m.folders.deleteConfirm(folder.name))) return
@@ -214,6 +224,24 @@
           </button>
           {#if isMenuOpen(`folder:${node.folder.id}`)}
             <div class="popup-menu" role="menu">
+              {#if manualSort}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={node === nodes[0] || isReordering()}
+                  onclick={() => handleMoveSibling(node.folder.id, -1)}
+                >
+                  {m.folders.moveUp}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={node === nodes[nodes.length - 1] || isReordering()}
+                  onclick={() => handleMoveSibling(node.folder.id, 1)}
+                >
+                  {m.folders.moveDown}
+                </button>
+              {/if}
               <button type="button" role="menuitem" onclick={() => handleRename(node.folder)}>
                 {m.folders.rename}
               </button>

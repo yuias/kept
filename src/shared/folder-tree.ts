@@ -135,3 +135,11 @@ export function reorderSiblings(
   const next = [...rest.slice(0, at), dragId, ...rest.slice(at)]
   return next.every((id, i) => id === ids[i]) ? null : next
 }
+
+/** Swaps `id` with its previous (-1) or next (1) sibling; null when it is missing or already at that end. */
+export function moveSibling(ids: readonly string[], id: string, direction: -1 | 1): string[] | null {
+  const index = ids.indexOf(id)
+  const neighbour = ids[index + direction]
+  if (index === -1 || neighbour === undefined) return null
+  return reorderSiblings(ids, id, neighbour, direction === 1)
+}
