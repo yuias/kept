@@ -867,4 +867,48 @@
   .note-editor-actions .danger {
     color: var(--danger);
   }
+
+  @media (max-width: 720px) {
+    .note-editor {
+      /* The UA's dialog:modal centring and max sizes must all be undone. */
+      margin: 0;
+      /* iOS ignores interactive-widget, so the box follows the visual viewport variables. */
+      inset: var(--vv-top, 0px) 0 auto 0;
+      width: 100%;
+      max-width: none;
+      height: var(--vv-height, 100dvh);
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+      padding: 12px;
+      gap: 8px;
+    }
+
+    .note-editor-body {
+      min-height: 0;
+      resize: none;
+    }
+
+    .note-editor-toolbar {
+      flex-wrap: wrap;
+    }
+
+    /* liveTheme (lib/live/decorations.ts) pins the editor to 40vh-60vh; this selector out-ranks its single generated class. */
+    .note-editor :global(.live-editor) {
+      min-height: 0;
+    }
+
+    .note-editor :global(.live-editor .cm-editor) {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+  }
+
+  /* At 0.85rem, iOS zooms the page when this field gets focus. */
+  @media (pointer: coarse) {
+    .note-editor-labels {
+      font-size: 16px;
+    }
+  }
 </style>
