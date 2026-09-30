@@ -265,4 +265,10 @@
     padding: 10px 16px;
     color: var(--text-muted);
   }
+
+  @media (max-width: 720px) {
+    .notes-view {
+      padding: 12px;
+    }
+  }
 </style>

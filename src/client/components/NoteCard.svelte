@@ -313,4 +313,17 @@
     max-width: 100%;
     min-width: 0;
   }
+
+  /* Actions sit under the content so 44px buttons never cover the title. */
+  @media (pointer: coarse) {
+    .note-card-actions {
+      position: static;
+      justify-content: flex-end;
+      padding: 0 4px 4px;
+    }
+
+    .note-title {
+      padding-right: 0;
+    }
+  }
 </style>
