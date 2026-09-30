@@ -15,6 +15,7 @@
   import { placeholderRange } from '../lib/image/insert'
   import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
+  import { toLf } from '../lib/live/line-endings'
   import { minimalChange } from '../lib/live/sync'
 
   let {
@@ -60,6 +61,9 @@
           // Keep CR/CRLF bodies byte-exact; by default CodeMirror splits on
           // any line ending and rewrites them to LF on the next edit.
           EditorState.lineSeparator.of('\n'),
+          // Pasted or dropped text is normalized instead: with the separator
+          // above, its CRs would otherwise land in the body and show as [CR].
+          EditorView.clipboardInputFilter.of(toLf),
           history(),
           drawSelection(),
           highlightSpecialChars(),
