@@ -231,10 +231,10 @@
 
   onDestroy(() => {
     open = false
-    // The only teardown path that is not already covered by a guarded flush
-    // elsewhere (Back navigation unmounts this component directly, without
-    // going through `close()`/`handleDialogClose`), so this is also where
-    // `onsettled` fires to tell the list it can safely reload.
+    // Every close ends here: Back navigation unmounts this component
+    // directly, and `handleDialogClose` clears the route without flushing.
+    // So this is also where `onsettled` fires to tell the list it can safely
+    // reload.
     void (async () => {
       await Promise.allSettled([...inflightImages])
       await autosave.flush()
@@ -578,13 +578,12 @@
   /**
    * Fires whenever the dialog actually closes, including paths that bypass
    * `requestClose` (a second Esc can skip `cancel`'s `preventDefault` in some
-   * browsers). The flush here is a fallback that is a no-op once
-   * `requestClose` has already drained everything.
+   * browsers). The route is cleared right away and the unmount flushes
+   * anything left (`onDestroy`). Waiting for a flush here would leave `?note`
+   * pointing at a closed dialog, and a card opened in that window would
+   * reuse this instance and then be closed by the late `onclose`.
    */
-  async function handleDialogClose(): Promise<void> {
-    await Promise.allSettled([...inflightImages])
-    await autosave.flush()
-    await commitFormat()
+  function handleDialogClose(): void {
     onclose()
   }
 </script>

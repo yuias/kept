@@ -1,9 +1,14 @@
-import { isNoteOverlayState, NOTE_OVERLAY_STATE } from './note-history'
+import { isOwnNoteOverlay, noteOverlayState } from './note-history'
 import { parseRoute, type Route } from './routes'
 
 const state = $state<{ current: Route }>({
   current: parseRoute(window.location.pathname, window.location.search),
 })
+
+// Tags overlay entries with the page load that pushed them (see closeNote).
+// `randomUUID` is missing on plain-http origins (a phone on the dev server's
+// LAN address); uniqueness per page load is all this needs.
+const PAGE_LOAD_ID = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
 
 window.addEventListener('popstate', () => {
   state.current = parseRoute(window.location.pathname, window.location.search)
@@ -43,7 +48,7 @@ export function link(node: HTMLAnchorElement): { destroy(): void } {
 
 /**
  * Opens the note editor by setting the `note` query param. A plain open pushes
- * an entry tagged with `NOTE_OVERLAY_STATE`, so `closeNote` can step back to
+ * an entry tagged with an overlay marker, so `closeNote` can step back to
  * the list page and the browser Back button closes the dialog.
  */
 export function openNote(id: string, options: { replace?: boolean } = {}): void {
@@ -54,7 +59,7 @@ export function openNote(id: string, options: { replace?: boolean } = {}): void 
   // this must not scroll the grid behind the dialog back to the top. It keeps
   // the current state so an existing overlay marker survives.
   if (options.replace) window.history.replaceState(window.history.state, '', url)
-  else window.history.pushState(NOTE_OVERLAY_STATE, '', url)
+  else window.history.pushState(noteOverlayState(PAGE_LOAD_ID), '', url)
   state.current = parseRoute(url.pathname, url.search)
 }
 
@@ -63,16 +68,17 @@ export function openNote(id: string, options: { replace?: boolean } = {}): void 
  * the grid keeps its scroll position and Back does not reopen the note.
  */
 export function closeNote(): void {
-  if (isNoteOverlayState(window.history.state)) {
-    // `popstate` updates the route. After a reload on this entry the list
-    // entry belongs to the old document, so this is a full page load instead.
+  if (isOwnNoteOverlay(window.history.state, PAGE_LOAD_ID)) {
+    // `popstate` updates the route.
     window.history.back()
     return
   }
 
-  // Deep link, reload without the marker, or arrival from another page: a
-  // pushed "closed" entry would make the next Back (or Android's Back gesture
-  // that already closed the dialog) reopen the note, so rewrite in place.
+  // Deep link, a marker from before a reload, or arrival from another page.
+  // Going back from a reloaded marker entry would unload the page before the
+  // editor's unmount flush runs, losing unsaved edits. A pushed "closed"
+  // entry would make the next Back (or Android's Back gesture that already
+  // closed the dialog) reopen the note, so rewrite in place.
   const url = new URL(window.location.href)
   url.searchParams.delete('note')
   window.history.replaceState(null, '', url)

@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { isNoteOverlayState, NOTE_OVERLAY_STATE } from './note-history'
+import { isOwnNoteOverlay, noteOverlayState } from './note-history'
 
-describe('isNoteOverlayState', () => {
-  it('accepts the marker and objects that carry it', () => {
-    expect(isNoteOverlayState(NOTE_OVERLAY_STATE)).toBe(true)
-    expect(isNoteOverlayState({ keptNoteOverlay: true, other: 1 })).toBe(true)
+describe('isOwnNoteOverlay', () => {
+  it('accepts a marker from the same page load, with or without extra fields', () => {
+    expect(isOwnNoteOverlay(noteOverlayState('d1'), 'd1')).toBe(true)
+    expect(isOwnNoteOverlay({ ...noteOverlayState('d1'), other: 1 }, 'd1')).toBe(true)
+  })
+
+  it('rejects a marker from another page load', () => {
+    expect(isOwnNoteOverlay(noteOverlayState('d1'), 'd2')).toBe(false)
+    expect(isOwnNoteOverlay({ keptNoteOverlay: true }, 'd1')).toBe(false)
   })
 
   it('rejects anything else', () => {
-    expect(isNoteOverlayState(null)).toBe(false)
-    expect(isNoteOverlayState(undefined)).toBe(false)
-    expect(isNoteOverlayState({})).toBe(false)
-    expect(isNoteOverlayState({ keptNoteOverlay: 'true' })).toBe(false)
-    expect(isNoteOverlayState('x')).toBe(false)
+    expect(isOwnNoteOverlay(null, 'd1')).toBe(false)
+    expect(isOwnNoteOverlay(undefined, 'd1')).toBe(false)
+    expect(isOwnNoteOverlay({}, 'd1')).toBe(false)
+    expect(isOwnNoteOverlay({ keptNoteOverlay: 'true', doc: 'd1' }, 'd1')).toBe(false)
+    expect(isOwnNoteOverlay('x', 'd1')).toBe(false)
   })
 })
