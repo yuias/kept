@@ -23,6 +23,8 @@ export const en = {
     themeLight: 'Light',
     themeDark: 'Dark',
     toggleSidebar: 'Toggle sidebar',
+    /** Accessible name of the phone drawer. */
+    menu: 'Menu',
   },
   sidebar: {
     notes: 'Notes',

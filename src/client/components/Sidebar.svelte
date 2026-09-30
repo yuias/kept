@@ -1,13 +1,14 @@
 <script lang="ts">
   import { asciiLower } from '../../shared/labels'
   import FolderTree from './FolderTree.svelte'
+  import SidebarDrawer from './SidebarDrawer.svelte'
   import { canCreateSubfolder, createFolder, folderError, folderTree, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
   import { moveNoteToFolder, noteMoveError } from '../lib/note-moves.svelte'
   import { isLabelsExpanded, labelCounts, labelError, toggleLabelsExpanded } from '../lib/labels.svelte'
   import { currentRoute, link } from '../lib/router.svelte'
-  import { sidebarOpen } from '../lib/sidebar.svelte'
+  import { isCompact, sidebarOpen } from '../lib/sidebar.svelte'
 
   const m = $derived(messages())
   const route = $derived(currentRoute())
@@ -50,7 +51,7 @@
   }
 </script>
 
-{#if sidebarOpen()}
+{#snippet nav(_inDrawer: boolean)}
   <nav class="sidebar">
     <a
       class="sidebar-link"
@@ -146,4 +147,12 @@
       {m.sidebar.settings}
     </a>
   </nav>
+{/snippet}
+
+{#if sidebarOpen()}
+  {#if isCompact()}
+    <SidebarDrawer label={m.nav.menu}>{@render nav(true)}</SidebarDrawer>
+  {:else}
+    {@render nav(false)}
+  {/if}
 {/if}

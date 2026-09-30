@@ -47,8 +47,13 @@ a {
 
 /* ---------- layout ---------- */
 
+/* The phone layout switches at 720px. The number is repeated (CSS cannot read
+   the TS constant) in: COMPACT_MAX_WIDTH_PX in lib/sidebar-model.ts, this file,
+   components/SearchBox.svelte, components/NoteEditor.svelte and
+   routes/NotesView.svelte. Change them together. */
 .app {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -361,6 +366,25 @@ dialog {
 
 dialog::backdrop {
   background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+dialog.sidebar-drawer {
+  margin: 0;
+  inset: 0 auto 0 0;
+  width: min(300px, 85vw);
+  max-width: none;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.sidebar-drawer .sidebar {
+  width: 100%;
+  height: 100%;
+  border-right: 0;
+  overscroll-behavior: contain;
 }
 
 .popup-menu {

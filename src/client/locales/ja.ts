@@ -16,6 +16,7 @@ export const ja: Messages = {
     themeLight: 'ライト',
     themeDark: 'ダーク',
     toggleSidebar: 'サイドバーの切り替え',
+    menu: 'メニュー',
   },
   sidebar: {
     notes: 'ノート',
