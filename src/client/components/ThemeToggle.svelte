@@ -46,4 +46,11 @@
     stroke-width: 1.4;
     stroke-linecap: round;
   }
+
+  @media (pointer: coarse) {
+    .theme-toggle {
+      min-width: 44px;
+      justify-content: center;
+    }
+  }
 </style>

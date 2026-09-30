@@ -134,4 +134,11 @@
   .folder-picker-spacer {
     flex: 1;
   }
+
+  @media (pointer: coarse) {
+    .folder-picker-row {
+      padding-top: 11px;
+      padding-bottom: 11px;
+    }
+  }
 </style>

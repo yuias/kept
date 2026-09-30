@@ -325,4 +325,21 @@
   .folder-children {
     padding-left: 16px;
   }
+
+  @media (pointer: coarse) {
+    .folder-link {
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
+
+    .folder-add,
+    .folder-menu-trigger {
+      min-width: 44px;
+    }
+
+    .folder-toggle,
+    .folder-toggle-spacer {
+      width: 32px;
+    }
+  }
 </style>

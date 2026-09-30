@@ -484,3 +484,34 @@ dialog.sidebar-drawer {
 .popup-menu button.danger {
   color: var(--danger);
 }
+
+@media (pointer: coarse) {
+  button,
+  .button {
+    min-height: 44px;
+  }
+
+  button.icon-button {
+    min-width: 44px;
+  }
+
+  .sidebar-heading-action {
+    min-width: 44px;
+  }
+
+  .sidebar-link,
+  .label-link {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .popup-menu button {
+    padding: 10px 12px;
+  }
+
+  /* FolderTree widens its toggle column to 32px here; keep label names
+     lined up with top-level folder names. */
+  .label-list {
+    padding-left: 34px;
+  }
+}
