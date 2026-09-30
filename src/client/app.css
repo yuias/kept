@@ -91,19 +91,85 @@ a {
   color: var(--text);
 }
 
-/* Reserved for the search box; grows to push the toggle and identity right. */
+/* Reserved for the search box; grows to push the toggle and identity right.
+   min-width: 0 stops the input's intrinsic width from overflowing at 360px. */
 .top-bar-slot {
   flex: 1;
+  min-width: 0;
 }
 
-.top-bar .identity,
-.top-bar .auth-link {
+.top-bar-account {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.account-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.identity,
+.auth-link {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
 
-.top-bar .identity.stale {
+.identity.stale {
   color: var(--danger);
+}
+
+.new-note-icon {
+  display: none;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 10px 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sidebar-footer .account-status {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.sidebar-footer .identity {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .top-bar {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .top-bar .brand,
+  .top-bar-account,
+  .new-note-label {
+    display: none;
+  }
+
+  .new-note-icon {
+    display: block;
+  }
+
+  .top-bar .new-note,
+  .top-bar .hamburger {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
 }
 
 .layout {

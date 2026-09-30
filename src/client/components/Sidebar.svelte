@@ -1,7 +1,9 @@
 <script lang="ts">
   import { asciiLower } from '../../shared/labels'
+  import AccountStatus from './AccountStatus.svelte'
   import FolderTree from './FolderTree.svelte'
   import SidebarDrawer from './SidebarDrawer.svelte'
+  import ThemeToggle from './ThemeToggle.svelte'
   import { canCreateSubfolder, createFolder, folderError, folderTree, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
@@ -51,7 +53,7 @@
   }
 </script>
 
-{#snippet nav(_inDrawer: boolean)}
+{#snippet nav(inDrawer: boolean)}
   <nav class="sidebar">
     <a
       class="sidebar-link"
@@ -146,6 +148,13 @@
     >
       {m.sidebar.settings}
     </a>
+
+    {#if inDrawer}
+      <div class="sidebar-footer">
+        <ThemeToggle />
+        <AccountStatus />
+      </div>
+    {/if}
   </nav>
 {/snippet}
 

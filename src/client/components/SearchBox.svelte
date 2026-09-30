@@ -115,6 +115,7 @@
 
   .search-input {
     flex: 1;
+    min-width: 0;
     border: 0;
     background: none;
     padding: 4px 0;
@@ -155,5 +156,30 @@
 
   .search-help li {
     margin-bottom: 4px;
+  }
+
+  @media (max-width: 720px) {
+    /* .top-bar is sticky, so the help panel anchors to it and spans the screen. */
+    .search-box {
+      position: static;
+      width: 100%;
+    }
+
+    .search-help {
+      left: 8px;
+      right: 8px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .search-box {
+      padding: 0 0 0 10px;
+    }
+
+    .search-help-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      justify-content: center;
+    }
   }
 </style>
