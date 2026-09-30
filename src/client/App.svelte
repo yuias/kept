@@ -6,6 +6,7 @@
   import SettingsPage from './routes/SettingsPage.svelte'
   import { messages } from './lib/i18n.svelte'
   import { closeMenu } from './lib/menu.svelte'
+  import { closeDrawer } from './lib/sidebar.svelte'
   import { currentRoute } from './lib/router.svelte'
   import { listQueryFor } from './lib/routes'
 
@@ -13,10 +14,14 @@
   const query = $derived(listQueryFor(route))
   const m = $derived(messages())
 
-  // Every navigation, note open and Back press reassigns the route object.
+  // Every navigation, note open and Back press reassigns the route object,
+  // and each one also closes the phone drawer.
   $effect(() => {
     void route
-    untrack(closeMenu)
+    untrack(() => {
+      closeMenu()
+      closeDrawer()
+    })
   })
 </script>
 

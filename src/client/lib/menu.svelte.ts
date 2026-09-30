@@ -30,6 +30,9 @@ document.addEventListener(
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape' || state.open === null) return
+  // A cancelled Esc keydown does not become a close request, so a menu inside
+  // the phone drawer (a modal dialog) closes alone and the drawer stays open.
+  event.preventDefault()
   const root = roots.get(state.open)
   state.open = null
   root?.querySelector<HTMLElement>('[aria-haspopup]')?.focus()
