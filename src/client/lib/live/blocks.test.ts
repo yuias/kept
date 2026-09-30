@@ -214,7 +214,13 @@ describe('blockquotes', () => {
 })
 
 describe('code blocks', () => {
-  it('styles every line and dims the fences', () => {
+  const texts = (doc: string, specs: BlockSpec[]): string[] =>
+    specs
+      .map((s) => s as { from: number; to: number })
+      .sort((a, b) => a.from - b.from)
+      .map((s) => doc.slice(s.from, s.to))
+
+  it('styles every line and hides the fences outside the block', () => {
     const doc = '```ts\nlet a\n```\n\nend'
     const specs = specsFor(doc)
     expect(lineClasses(specs)).toEqual([
@@ -222,17 +228,27 @@ describe('code blocks', () => {
       'cm-live-codeblock',
       'cm-live-codeblock cm-live-codeblock-last',
     ])
-    const dimmed = kinds(specs, 'mark')
-      .map((s) => s as { from: number; to: number })
-      .sort((a, b) => a.from - b.from)
-      .map((s) => doc.slice(s.from, s.to))
-    expect(dimmed).toEqual(['```', 'ts', '```'])
+    expect(texts(doc, kinds(specs, 'hide'))).toEqual(['```', 'ts', '```'])
+    expect(kinds(specs, 'mark')).toEqual([])
+  })
+
+  it('dims the fences while any line of the block is edited', () => {
+    const doc = '```ts\nlet a\n```\n\nend'
+    const specs = specsFor(doc, 8)
+    expect(texts(doc, kinds(specs, 'mark'))).toEqual(['```', 'ts', '```'])
+    expect(kinds(specs, 'hide')).toEqual([])
+  })
+
+  it('hides the only fence of an unclosed block', () => {
+    const doc = 'end\n```\ncode'
+    expect(texts(doc, kinds(specsFor(doc, 0), 'hide'))).toEqual(['```'])
   })
 
   it('ignores block syntax inside code', () => {
     const doc = '```\n> q\n- [ ] t\n![a](/img/x)\n```\n\nend'
     const specs = specsFor(doc)
-    expect(kinds(specs, 'hide')).toEqual([])
+    expect(texts(doc, kinds(specs, 'hide'))).toEqual(['```', '```'])
+    expect(kinds(specs, 'bullet')).toEqual([])
     expect(kinds(specs, 'checkbox')).toEqual([])
     expect(kinds(specs, 'image')).toEqual([])
   })
@@ -243,6 +259,7 @@ describe('quotes and code', () => {
     const doc = '> ```\n> code\n> ```\n\nend'
     const hides = kinds(specsFor(doc), 'hide')
       .map((s) => s as { from: number; to: number })
+      .filter((s) => doc[s.from] === '>')
       .sort((x, y) => x.from - y.from)
     expect(hides).toEqual([
       { kind: 'hide', from: 0, to: 2 },
@@ -253,7 +270,9 @@ describe('quotes and code', () => {
 
   it('keeps the mark of the cursor line inside a quoted code block', () => {
     const doc = '> ```\n> code\n> ```\n\nend'
-    const hides = kinds(specsFor(doc, 8), 'hide').map((s) => (s as { from: number }).from)
+    const hides = kinds(specsFor(doc, 8), 'hide')
+      .map((s) => (s as { from: number }).from)
+      .filter((from) => doc[from] === '>')
     expect(hides.sort((x, y) => x - y)).toEqual([0, 13])
   })
 

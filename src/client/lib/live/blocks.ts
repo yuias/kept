@@ -181,8 +181,16 @@ export function collectBlockSpecs(state: EditorState, ranges: readonly TextRange
               if (n === last) cls.push('cm-live-codeblock-last')
               return cls.join(' ')
             })
+            // Fences show while any line of the block is being edited, so the
+            // user can see where the block ends; otherwise they are hidden
+            // like the inline code marks.
+            const first = doc.lineAt(ref.from).number
+            const last = doc.lineAt(ref.to).number
+            let editing = false
+            for (const n of active) if (n >= first && n <= last) editing = true
             for (const child of [...ref.node.getChildren('CodeMark'), ...ref.node.getChildren('CodeInfo')]) {
-              emit({ kind: 'mark', from: child.from, to: child.to, className: MARKER_CLASS })
+              if (editing) emit({ kind: 'mark', from: child.from, to: child.to, className: MARKER_CLASS })
+              else emit({ kind: 'hide', from: child.from, to: child.to })
             }
             // The parser nests the `>` of a quoted code block inside the block.
             for (const child of ref.node.getChildren('QuoteMark')) quoteMark(child.from, child.to)
