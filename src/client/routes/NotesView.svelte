@@ -10,7 +10,7 @@
   import { messages } from '../lib/i18n.svelte'
   import { reloadLabels } from '../lib/labels.svelte'
   import { notesVersion } from '../lib/note-moves.svelte'
-  import { currentRoute, openNote } from '../lib/router.svelte'
+  import { closeNote, currentRoute, openNote } from '../lib/router.svelte'
   import { noteParam, type ListQuery } from '../lib/routes'
 
   let { query }: { query: ListQuery } = $props()
@@ -218,7 +218,7 @@
     id={noteId}
     folderId={query.folder ?? null}
     label={query.label ?? null}
-    onclose={() => openNote(null)}
+    onclose={closeNote}
     onsettled={() => load()}
   />
 {/if}
