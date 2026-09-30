@@ -274,8 +274,10 @@ button:focus-visible,
   margin: 10px 4px 2px;
 }
 
-.sidebar-heading-row .sidebar-heading {
-  margin: 0;
+/* Indent a plain heading by the toggle icon + gap of the collapsible
+   heading, so "Folders" and "Labels" start at the same x. */
+.sidebar-heading-row > .sidebar-heading {
+  margin: 0 0 0 18px;
 }
 
 .sidebar-heading-action {
@@ -316,7 +318,7 @@ button:focus-visible,
 }
 
 .sidebar-heading-toggle .sidebar-heading {
-  margin: 10px 0 2px;
+  margin: 0;
 }
 
 .folder-toggle-icon {
@@ -327,10 +329,12 @@ button:focus-visible,
   font-size: 0.72rem;
 }
 
+/* Matches the toggle column + gap in front of folder names (FolderTree),
+   so label names line up with top-level folder names. */
 .label-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 20px;
 }
 
 .label-link {
