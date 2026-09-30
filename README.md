@@ -138,6 +138,19 @@ valid. The only way out is signing out. `/api/me` reports this case as
 `stale: true`, and protected routes return 401 `session_stale`; the UI shows
 a sign-out link rather than a sign-in link in this state.
 
+## Install on a phone
+
+Open the site in the phone's browser and sign in through Access, then use
+Add to Home Screen (Safari's share sheet, or Chrome's menu). The home-screen
+app opens without browser chrome but has no offline support. On iOS it keeps
+its own sign-in, separate from Safari, so the first launch asks for the Access
+login again.
+
+The icons are generated placeholders. To change them, edit
+`scripts/generate-icons.mjs` and run `node scripts/generate-icons.mjs`, or
+replace the files in `public/` (`icon-192.png`, `icon-512.png`,
+`apple-touch-icon.png` and `icon.svg`).
+
 ## Trash retention
 
 Trashed notes are deleted for good once they have been in the trash longer
