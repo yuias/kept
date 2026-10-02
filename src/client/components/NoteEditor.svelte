@@ -3,9 +3,11 @@
   import { effectiveFormat } from '../../shared/format'
   import { normalizeLabels, parseLabelInput } from '../../shared/labels'
   import { LABEL_MAX_CHARS, LABELS_PER_NOTE_MAX } from '../../shared/limits'
+  import { copyableNoteText } from '../../shared/note-text'
   import type { ConcreteFormat, ImageUploadResponse, NoteFormat, UpdateNoteInput } from '../../shared/types'
   import { ApiError, createNote, deleteNoteForever, fetchNote, restoreNote, trashNote, updateNote } from '../lib/api'
   import { createAutosave, type AutosaveStatus } from '../lib/autosave'
+  import { createCopyAction } from '../lib/clipboard.svelte'
   import { formatEdited, formatFullTimestamp } from '../lib/datetime'
   import { isOutsideRect } from '../lib/dialog'
   import { describeApiError } from '../lib/errors'
@@ -231,6 +233,7 @@
 
   onDestroy(() => {
     open = false
+    copyAction.dispose()
     // Every close ends here: Back navigation unmounts this component
     // directly, and `handleDialogClose` clears the route without flushing.
     // So this is also where `onsettled` fires to tell the list it can safely
@@ -516,6 +519,16 @@
     else window.open(url, '_blank', 'noopener')
   }
 
+  // Copied from the editor state, so pending autosaves do not matter.
+  const copyAction = createCopyAction()
+  const copyLabel = $derived(
+    copyAction.state === 'copied' ? m.editor.copied : copyAction.state === 'failed' ? m.editor.copyFailed : m.editor.copyText,
+  )
+
+  function copyNote(): Promise<void> {
+    return copyAction.run(copyableNoteText(title, body))
+  }
+
   function viewRaw(): Promise<void> {
     return openRaw('')
   }
@@ -737,6 +750,9 @@
           <Icon name="trash" />
         </button>
       {/if}
+      <button type="button" class="icon-button" aria-label={copyLabel} title={copyLabel} onclick={copyNote}>
+        <Icon name={copyAction.state === 'copied' ? 'check' : 'copy'} />
+      </button>
       <button
         type="button"
         class="icon-button"

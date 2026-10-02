@@ -23,3 +23,35 @@ export function extractImageUrls(markdown: string, max: number): string[] {
   }
   return [...urls]
 }
+
+// Upload placeholders have an empty target, so IMAGE_SYNTAX does not match them.
+const UPLOAD_PLACEHOLDER = /!\[uploading-[^\]]*\]\(\)/g
+
+/**
+ * Removes local images and upload placeholders from markdown; external image
+ * syntax stays, as it is only text in this app. A line left empty by the
+ * removal is dropped together with one adjacent blank line, so paragraphs
+ * keep a single blank line between them.
+ */
+export function stripLocalImages(markdown: string): string {
+  const out: string[] = []
+  // Set after dropping a line that followed a blank line (or the start), so
+  // the blank line after it is dropped too.
+  let skipNextBlank = false
+  for (const line of markdown.split('\n')) {
+    const stripped = line
+      .replace(IMAGE_SYNTAX, (match, url: string) => (isLocalImageUrl(url) ? '' : match))
+      .replace(UPLOAD_PLACEHOLDER, '')
+    if (stripped !== line && stripped.trim() === '') {
+      if (out.length === 0 || out[out.length - 1]?.trim() === '') skipNextBlank = true
+      continue
+    }
+    if (skipNextBlank && line.trim() === '') {
+      skipNextBlank = false
+      continue
+    }
+    skipNextBlank = false
+    out.push(stripped)
+  }
+  return out.join('\n').replace(/^\n+|\n+$/g, '')
+}

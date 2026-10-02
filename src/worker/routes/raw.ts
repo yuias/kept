@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
+import { rawNoteText } from '../../shared/note-text'
 import { requireIdentity } from '../auth'
 import { ownerOf, type HonoEnv } from '../http'
 import { isValidId } from '../id'
@@ -40,7 +41,7 @@ rawRoutes.get('/raw/:id', requireIdentity, async (c) => {
   const note = await getNote(c.env.DB, owner, id)
   if (!note) throw new HTTPException(404, { message: 'note not found' })
 
-  const content = note.title !== '' ? `# ${note.title}\n\n${note.body}` : note.body
+  const content = rawNoteText(note.title, note.body)
 
   const headers: Record<string, string> = {
     'content-type': 'text/markdown; charset=utf-8',

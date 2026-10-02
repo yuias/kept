@@ -1,6 +1,10 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { sortLabelsCaseInsensitive } from '../../shared/labels'
+  import { copyableNoteText } from '../../shared/note-text'
   import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
+  import { fetchNote } from '../lib/api'
+  import { createCopyAction } from '../lib/clipboard.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
   import { writeNoteDrag } from '../lib/note-drag'
@@ -33,6 +37,18 @@
     } finally {
       busy = false
     }
+  }
+
+  // The summary has no body, so the note is fetched; copyText starts the
+  // clipboard write before the fetch resolves.
+  const copyAction = createCopyAction()
+  onDestroy(() => copyAction.dispose())
+  const copyLabel = $derived(
+    copyAction.state === 'copied' ? m.editor.copied : copyAction.state === 'failed' ? m.editor.copyFailed : m.editor.copyText,
+  )
+
+  function copyNote(): Promise<void> {
+    return copyAction.run(fetchNote(note.id).then((full) => copyableNoteText(full.title, full.body)))
   }
 
   function handleDragStart(event: DragEvent): void {
@@ -113,6 +129,16 @@
         onclick={() => run({ archived: !note.archived })}
       >
         <Icon name={note.archived ? 'unarchive' : 'archive'} size={14} />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        class:active={copyAction.state !== 'idle'}
+        aria-label={copyLabel}
+        title={copyLabel}
+        onclick={copyNote}
+      >
+        <Icon name={copyAction.state === 'copied' ? 'check' : 'copy'} size={14} />
       </button>
       <span class="note-card-menu" use:menuRoot={menuKey}>
         <button
@@ -279,7 +305,7 @@
     overflow-wrap: anywhere;
     max-width: 100%;
     min-width: 0;
-    padding-right: 60px;
+    padding-right: 88px;
   }
 
   .note-labels {

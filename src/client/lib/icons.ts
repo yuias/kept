@@ -9,6 +9,8 @@ export type IconName =
   | 'viewRaw'
   | 'download'
   | 'close'
+  | 'copy'
+  | 'check'
 
 /** Path data on a 16x16 viewBox, drawn as 1.4px round strokes. */
 export const ICON_PATHS: Record<IconName, readonly string[]> = {
@@ -31,4 +33,6 @@ export const ICON_PATHS: Record<IconName, readonly string[]> = {
   viewRaw: ['M5.5 4.5 2 8l3.5 3.5', 'M10.5 4.5 14 8l-3.5 3.5'],
   download: ['M8 2v8', 'M4.5 6.5 8 10l3.5-3.5', 'M2.5 13.5h11'],
   close: ['M3.5 3.5l9 9', 'M12.5 3.5l-9 9'],
+  copy: ['M5.5 5.5h8v8h-8z', 'M10.5 5.5v-3h-8v8h3'],
+  check: ['M3 8.5l3 3 7-7'],
 }
