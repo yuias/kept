@@ -5,6 +5,7 @@ import type {
   Folder,
   ImageUploadResponse,
   LabelCount,
+  LinkPreview,
   MeResponse,
   Note,
   NoteListResponse,
@@ -148,6 +149,10 @@ export function fetchSettings(): Promise<AppSettings> {
 
 export function updateSettings(input: Partial<AppSettings>): Promise<AppSettings> {
   return request<AppSettings>('/api/settings', withJsonBody('PUT', input))
+}
+
+export function fetchLinkPreview(url: string): Promise<LinkPreview> {
+  return request<LinkPreview>(`/api/link-preview?url=${encodeURIComponent(url)}`)
 }
 
 export function uploadImage(

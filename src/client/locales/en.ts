@@ -141,6 +141,10 @@ export const en = {
     viewRaw: 'View raw',
     downloadMarkdown: 'Download .md',
     lastModified: (when: string) => `Last modified ${when}`,
+    pasteAsLink: 'Link',
+    pasteAsCard: 'Card',
+    pasteAsLabel: 'Paste as',
+    editCard: 'Edit card',
   },
   imageUrlDialog: {
     title: 'Insert image from URL',

@@ -133,6 +133,10 @@ export const ja: Messages = {
     viewRaw: 'Rawを表示',
     downloadMarkdown: '.mdをダウンロード',
     lastModified: (when: string) => `最終更新: ${when}`,
+    pasteAsLink: 'リンク',
+    pasteAsCard: 'カード',
+    pasteAsLabel: '貼り付け形式',
+    editCard: 'カードを編集',
   },
   imageUrlDialog: {
     title: 'URLから画像を挿入',
