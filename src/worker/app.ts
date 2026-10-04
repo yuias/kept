@@ -6,6 +6,7 @@ import { ApiException, type HonoEnv } from './http'
 import { fetchImageRoutes } from './routes/fetch-image'
 import { foldersRoutes } from './routes/folders'
 import { imagesRoutes } from './routes/images'
+import { linkPreviewRoutes } from './routes/link-preview'
 import { notesRoutes } from './routes/notes'
 import { rawRoutes } from './routes/raw'
 import { settingsRoutes } from './routes/settings'
@@ -31,6 +32,7 @@ app.route('/', settingsRoutes)
 app.route('/', foldersRoutes)
 app.route('/', imagesRoutes)
 app.route('/', fetchImageRoutes)
+app.route('/', linkPreviewRoutes)
 app.route('/', rawRoutes)
 
 app.notFound((c) => c.json({ error: 'not_found', message: 'no such endpoint' }, 404))
