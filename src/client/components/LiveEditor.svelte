@@ -15,6 +15,7 @@
   import { placeholderRange } from '../lib/image/insert'
   import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
+  import { linkClicks } from '../lib/live/links'
   import { toLf } from '../lib/live/line-endings'
   import { minimalChange } from '../lib/live/sync'
 
@@ -75,6 +76,7 @@
           EditorView.lineWrapping,
           liveDecorations,
           liveBlocks,
+          linkClicks,
           taskLabel.of(() => messages().editor.toggleTask),
           liveTheme,
           blocksTheme,

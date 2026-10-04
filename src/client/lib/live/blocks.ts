@@ -14,7 +14,8 @@ import { syntaxTree } from '@codemirror/language'
 import { type EditorState, type Extension, Facet, type Range, StateField, type Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
 import { isLocalImageUrl } from '../../../shared/images'
-import { activeLineNumbers, MARKER_CLASS } from './decorations'
+import { activeLineNumbers } from './active-lines'
+import { MARKER_CLASS } from './decorations'
 
 export type BlockSpec =
   | { kind: 'line'; from: number; className: string }

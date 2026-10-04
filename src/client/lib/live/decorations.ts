@@ -6,11 +6,15 @@
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, type Range } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { activeLineNumbers } from './active-lines'
+import { linkHref } from './links'
 
 export type LiveSpec =
   | { kind: 'line'; from: number; className: string }
   | { kind: 'mark'; from: number; to: number; className: string }
   | { kind: 'hide'; from: number; to: number }
+  // A link's visible text; href is null when the target is not allowed.
+  | { kind: 'link'; from: number; to: number; href: string | null }
 
 interface TextRange {
   from: number
@@ -18,17 +22,6 @@ interface TextRange {
 }
 
 export const MARKER_CLASS = 'cm-live-marker'
-
-/** 1-based numbers of every line touched by a selection range. */
-export function activeLineNumbers(state: EditorState): Set<number> {
-  const lines = new Set<number>()
-  for (const range of state.selection.ranges) {
-    const first = state.doc.lineAt(range.from).number
-    const last = state.doc.lineAt(range.to).number
-    for (let n = first; n <= last; n++) lines.add(n)
-  }
-  return lines
-}
 
 /**
  * Maps the syntax tree over `ranges` to decoration specs. Kept separate from
@@ -51,6 +44,10 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
   }
   const mark = (from: number, to: number, className: string): void => {
     if (from < to) specs.push({ kind: 'mark', from, to, className })
+  }
+
+  const link = (from: number, to: number, target: string): void => {
+    if (from < to) specs.push({ kind: 'link', from, to, href: linkHref(target) })
   }
 
   for (const range of ranges) {
@@ -121,21 +118,23 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
             // Only the inline form `[text](url)` is rewritten. Reference and
             // shortcut forms (`[text][ref]`, `[text]`) are plain-looking
             // prose, so hiding their brackets would misrepresent the text.
-            if (open && close && ref.node.getChild('URL')) {
-              mark(open.to, close.from, 'cm-live-link')
+            const url = ref.node.getChild('URL')
+            if (open && close && url) {
+              link(open.to, close.from, doc.sliceString(url.from, url.to))
               marker(open.from, open.to)
               marker(close.from, ref.to)
             }
             return false
           }
           case 'Autolink': {
-            mark(ref.from, ref.to, 'cm-live-link')
+            const url = ref.node.getChild('URL')
+            link(ref.from, ref.to, url ? doc.sliceString(url.from, url.to) : '')
             for (const child of ref.node.getChildren('LinkMark')) marker(child.from, child.to)
             return false
           }
           case 'URL': {
             // A bare URL (GFM autolink literal); URLs inside links are handled above.
-            mark(ref.from, ref.to, 'cm-live-link')
+            link(ref.from, ref.to, doc.sliceString(ref.from, ref.to))
             return false
           }
           // Block-level rendering (images, code blocks, ...) is out of scope
@@ -172,10 +171,22 @@ function lineDecoration(className: string): Decoration {
   return deco
 }
 
+// Not cached: `MarkDecoration.eq` compares tag and attributes, so CodeMirror
+// reuses the DOM anyway.
+function linkDecoration(href: string | null): Decoration {
+  if (href === null) return markDecoration('cm-live-link')
+  return Decoration.mark({
+    tagName: 'a',
+    class: 'cm-live-link',
+    attributes: { href, target: '_blank', rel: 'noopener noreferrer' },
+  })
+}
+
 export function buildDecorations(state: EditorState, ranges: readonly TextRange[]): DecorationSet {
   const decorations: Range<Decoration>[] = collectSpecs(state, ranges).map((spec) => {
     if (spec.kind === 'line') return lineDecoration(spec.className).range(spec.from)
     if (spec.kind === 'hide') return hideDecoration.range(spec.from, spec.to)
+    if (spec.kind === 'link') return linkDecoration(spec.href).range(spec.from, spec.to)
     return markDecoration(spec.className).range(spec.from, spec.to)
   })
   // Specs arrive in tree order, which is not the start order the builder needs.
@@ -237,4 +248,5 @@ export const liveTheme = EditorView.theme({
     padding: '0 3px',
   },
   '.cm-live-link': { color: 'var(--accent)', textDecoration: 'underline' },
+  'a.cm-live-link': { cursor: 'pointer' },
 })

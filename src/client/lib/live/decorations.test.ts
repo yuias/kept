@@ -2,7 +2,8 @@ import { markdownLanguage } from '@codemirror/lang-markdown'
 import { LanguageSupport } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { activeLineNumbers, buildDecorations, collectSpecs, type LiveSpec } from './decorations'
+import { activeLineNumbers } from './active-lines'
+import { buildDecorations, collectSpecs, type LiveSpec } from './decorations'
 
 function specsFor(doc: string, cursor: number | [number, number] = doc.length): LiveSpec[] {
   const [anchor, head] = Array.isArray(cursor) ? cursor : [cursor, cursor]
@@ -89,7 +90,24 @@ describe('links', () => {
     const doc = '[text](https://example.com "t")\n\nx'
     const specs = specsFor(doc)
     expect(hidden(specs, doc)).toEqual(['[', '](https://example.com "t")'])
-    expect(classes(specs)).toContain('cm-live-link')
+    expect(specs).toContainEqual({ kind: 'link', from: 1, to: 5, href: 'https://example.com' })
+  })
+
+  it('gives a link spec with an href for allowed targets', () => {
+    const doc = '[t](https://a.example)\n\nx'
+    expect(specsFor(doc)).toContainEqual({ kind: 'link', from: 1, to: 2, href: 'https://a.example' })
+  })
+
+  it('leaves the href null for a disallowed target', () => {
+    const doc = '[t](javascript:x)\n\nx'
+    expect(specsFor(doc)).toContainEqual({ kind: 'link', from: 1, to: 2, href: null })
+  })
+
+  it('derives hrefs for bare URLs and autolinks', () => {
+    const bare = 'see https://a.example now\n\nx'
+    expect(specsFor(bare)).toContainEqual({ kind: 'link', from: 4, to: 21, href: 'https://a.example' })
+    const auto = '<https://a.example>\n\nx'
+    expect(specsFor(auto)).toContainEqual({ kind: 'link', from: 0, to: 19, href: 'https://a.example' })
   })
 
   it('leaves reference-style brackets alone', () => {
