@@ -54,6 +54,26 @@ describe('markdownToPlain', () => {
     expect(markdownToPlain('```\nline1\n\n\nline2\n```\n\nnext para')).toBe('line1\n\nline2\nnext para')
   })
 
+  it('shows the URL for a card line', () => {
+    expect(markdownToPlain('@[card](https://example.com)')).toBe('https://example.com')
+  })
+
+  it('keeps surrounding paragraphs around a card', () => {
+    expect(markdownToPlain('before\n\n@[card](https://x.example)\n\nafter')).toBe('before\nhttps://x.example\nafter')
+  })
+
+  it('puts a card inside a paragraph on its own line', () => {
+    expect(markdownToPlain('a\n@[card](https://x.example)\nb')).toBe('a\nhttps://x.example\nb')
+  })
+
+  it('keeps a mid-line card marker as before', () => {
+    expect(markdownToPlain('see @[card](https://x.example) here')).toBe('see @card here')
+  })
+
+  it('keeps a card inside a fenced code block verbatim', () => {
+    expect(markdownToPlain('```\n@[card](https://x.example)\n```')).toBe('@[card](https://x.example)')
+  })
+
   it('passes Japanese text through unchanged', () => {
     expect(markdownToPlain('日本語のテキストです')).toBe('日本語のテキストです')
   })

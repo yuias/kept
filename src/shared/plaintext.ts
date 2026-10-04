@@ -1,5 +1,6 @@
 import { marked } from 'marked'
 import type { Token, Tokens } from 'marked'
+import { parseCardLine } from './link-card'
 
 // Strips the markup marked's own renderer would add, so cards can show a
 // plain preview without shipping a renderer (or DOM) into the Worker.
@@ -75,8 +76,23 @@ function tableToText(table: Tokens.Table): string {
   return rows.map((row) => row.map((cell) => inlineToText(cell.tokens)).join(' ')).join('\n')
 }
 
+// marked lexes a card line as text `@` plus a link token, which would
+// otherwise flatten to "@card"; show the URL instead.
 function inlineToText(tokens: Token[]): string {
-  return tokens.map(inlineTokenToText).join('')
+  let out = ''
+  for (const [i, token] of tokens.entries()) {
+    const cardUrl = token.type === 'link' ? cardUrlAt(out, token as Tokens.Link, tokens[i + 1]) : null
+    if (cardUrl !== null) out = out.slice(0, -1) + cardUrl
+    else out += inlineTokenToText(token)
+  }
+  return out
+}
+
+function cardUrlAt(out: string, link: Tokens.Link, next: Token | undefined): string | null {
+  if (!out.endsWith('@')) return null
+  if (out.length > 1 && out[out.length - 2] !== '\n') return null
+  if (next && !(next as Tokens.Generic).raw.startsWith('\n')) return null
+  return parseCardLine('@' + link.raw)
 }
 
 function inlineTokenToText(token: Token): string {
