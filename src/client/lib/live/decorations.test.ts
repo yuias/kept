@@ -110,6 +110,23 @@ describe('links', () => {
     expect(specsFor(auto)).toContainEqual({ kind: 'link', from: 0, to: 19, href: 'https://a.example' })
   })
 
+  it('emits nothing for a card line off the caret line', () => {
+    const doc = '@[card](https://a.example)\n\ntail'
+    expect(specsFor(doc, doc.length)).toEqual([])
+  })
+
+  it('still decorates a card line that holds the caret', () => {
+    const doc = '@[card](https://a.example)\n\ntail'
+    const specs = specsFor(doc, 3)
+    expect(specs).toContainEqual({ kind: 'link', from: 2, to: 6, href: 'https://a.example' })
+    expect(classes(specs)).toContain('cm-live-marker')
+  })
+
+  it('keeps decorating a mid-line card-like link', () => {
+    const doc = 'see @[card](https://a.example)\n\ntail'
+    expect(specsFor(doc, doc.length)).toContainEqual({ kind: 'link', from: 6, to: 10, href: 'https://a.example' })
+  })
+
   it('leaves reference-style brackets alone', () => {
     const doc = '[text][ref]\n\nx'
     expect(hidden(specsFor(doc), doc)).toEqual([])

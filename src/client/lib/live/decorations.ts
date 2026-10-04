@@ -6,6 +6,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, type Range } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { parseCardLine } from '../../../shared/link-card'
 import { activeLineNumbers } from './active-lines'
 import { linkHref } from './links'
 
@@ -112,6 +113,10 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
             return true
           }
           case 'Link': {
+            // An inactive card line is replaced by a block widget, and inline
+            // replaces underneath it must not overlap that range.
+            const line = doc.lineAt(ref.from)
+            if (!active.has(line.number) && parseCardLine(line.text) !== null) return false
             const marks = ref.node.getChildren('LinkMark')
             const open = marks[0]
             const close = marks[1]

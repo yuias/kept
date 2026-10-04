@@ -1,0 +1,55 @@
+import { markdownLanguage } from '@codemirror/lang-markdown'
+import { LanguageSupport } from '@codemirror/language'
+import { EditorState } from '@codemirror/state'
+import { describe, expect, it } from 'vitest'
+import { collectCardLines, isInCode } from './link-cards'
+
+function stateFor(doc: string): EditorState {
+  return EditorState.create({ doc, extensions: [new LanguageSupport(markdownLanguage)] })
+}
+
+describe('collectCardLines', () => {
+  it('finds card lines with their range and url', () => {
+    const doc = 'intro\n@[card](https://a.example/x)\n\ntext\n@[card](https://b.example/y_(z))  \nend'
+    const first = doc.indexOf('@[card](https://a')
+    const second = doc.indexOf('@[card](https://b')
+    expect(collectCardLines(stateFor(doc))).toEqual([
+      { from: first, to: first + '@[card](https://a.example/x)'.length, url: 'https://a.example/x' },
+      { from: second, to: second + '@[card](https://b.example/y_(z))  '.length, url: 'https://b.example/y_(z)' },
+    ])
+  })
+
+  it('ignores a card inside a closed fenced block', () => {
+    const doc = '```\n@[card](https://a.example)\n```\n@[card](https://b.example)'
+    expect(collectCardLines(stateFor(doc)).map((c) => c.url)).toEqual(['https://b.example'])
+  })
+
+  it('ignores a card inside an unclosed fenced block', () => {
+    expect(collectCardLines(stateFor('```\n@[card](https://a.example)'))).toEqual([])
+  })
+
+  it('ignores a card inside an indented code block', () => {
+    expect(collectCardLines(stateFor('para\n\n    @[card](https://a.example)\n'))).toEqual([])
+  })
+
+  it('ignores mid-line, indented and non-http card text', () => {
+    const doc = 'see @[card](https://a.example)\n @[card](https://b.example)\n@[card](ftp://c.example)'
+    expect(collectCardLines(stateFor(doc))).toEqual([])
+  })
+})
+
+describe('isInCode', () => {
+  it('is true inside fenced code and inline code', () => {
+    const doc = '```\nabc\n```\n\nuse `code` here'
+    const state = stateFor(doc)
+    expect(isInCode(state, doc.indexOf('abc') + 1)).toBe(true)
+    expect(isInCode(state, doc.indexOf('code') + 1)).toBe(true)
+  })
+
+  it('is false in a paragraph and on an empty line after a closed fence', () => {
+    const doc = '```\nabc\n```\n\nplain text'
+    const state = stateFor(doc)
+    expect(isInCode(state, doc.indexOf('plain') + 2)).toBe(false)
+    expect(isInCode(state, doc.indexOf('\n\n') + 1)).toBe(false)
+  })
+})
