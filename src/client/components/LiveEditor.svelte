@@ -15,6 +15,7 @@
   import { placeholderRange } from '../lib/image/insert'
   import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
+  import { cardLabels, cardTheme, linkCards } from '../lib/live/link-cards'
   import { linkClicks } from '../lib/live/links'
   import { toLf } from '../lib/live/line-endings'
   import { minimalChange } from '../lib/live/sync'
@@ -77,9 +78,12 @@
           liveDecorations,
           liveBlocks,
           linkClicks,
+          linkCards,
+          cardLabels.of(() => ({ edit: messages().editor.editCard })),
           taskLabel.of(() => messages().editor.toggleTask),
           liveTheme,
           blocksTheme,
+          cardTheme,
           paste,
           placeholderSlot.of(placeholderExtension(untrack(() => placeholder))),
           editableSlot.of(editableExtensions(untrack(() => readonly))),

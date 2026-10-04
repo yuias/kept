@@ -1,8 +1,8 @@
 import { markdownLanguage } from '@codemirror/lang-markdown'
 import { LanguageSupport } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { EditorState, RangeSet } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { collectCardLines, isInCode } from './link-cards'
+import { cardField, collectCardLines, isInCode, linkCards } from './link-cards'
 
 function stateFor(doc: string): EditorState {
   return EditorState.create({ doc, extensions: [new LanguageSupport(markdownLanguage)] })
@@ -51,5 +51,52 @@ describe('isInCode', () => {
     const state = stateFor(doc)
     expect(isInCode(state, doc.indexOf('plain') + 2)).toBe(false)
     expect(isInCode(state, doc.indexOf('\n\n') + 1)).toBe(false)
+  })
+})
+
+describe('cardField', () => {
+  function cardState(doc: string, anchor = 0): EditorState {
+    return EditorState.create({
+      doc,
+      selection: { anchor },
+      extensions: [new LanguageSupport(markdownLanguage), linkCards],
+    })
+  }
+
+  function blockRanges(state: EditorState): { from: number; to: number; block: boolean }[] {
+    const ranges: { from: number; to: number; block: boolean }[] = []
+    for (const iter = RangeSet.iter([state.field(cardField).decorations]); iter.value; iter.next()) {
+      ranges.push({ from: iter.from, to: iter.to, block: iter.value.spec.block === true })
+    }
+    return ranges
+  }
+
+  const doc = 'top\n@[card](https://a.example)\nbottom'
+  const cardFrom = doc.indexOf('@[card]')
+  const cardTo = cardFrom + '@[card](https://a.example)'.length
+
+  it('replaces a card line off the caret line with one block widget', () => {
+    expect(blockRanges(cardState(doc))).toEqual([{ from: cardFrom, to: cardTo, block: true }])
+  })
+
+  it('shows no widget while the caret is on the card line', () => {
+    expect(blockRanges(cardState(doc, cardFrom + 3))).toEqual([])
+    expect(blockRanges(cardState(doc, cardTo))).toEqual([])
+  })
+
+  it('keeps the card list when only the selection moves', () => {
+    const before = cardState(doc)
+    const after = before.update({ selection: { anchor: cardFrom + 2 } }).state
+    expect(after.field(cardField).cards).toBe(before.field(cardField).cards)
+    expect(blockRanges(after)).toEqual([])
+    expect(blockRanges(after.update({ selection: { anchor: 0 } }).state)).toHaveLength(1)
+  })
+
+  it('adds a widget when an edit creates a card line', () => {
+    const before = cardState('a\n\nb')
+    expect(blockRanges(before)).toEqual([])
+    const after = before.update({ changes: { from: 2, insert: '@[card](https://b.example)' } }).state
+    expect(after.field(cardField).cards.map((c) => c.url)).toEqual(['https://b.example'])
+    expect(blockRanges(after)).toEqual([{ from: 2, to: 2 + '@[card](https://b.example)'.length, block: true }])
   })
 })
