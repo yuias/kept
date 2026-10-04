@@ -33,3 +33,12 @@ export const REGEX_SCAN_BATCH_SIZE = 200
 export const CARD_IMAGES_MAX = 4
 // Slice of `body`, starting at the first `![`, scanned for card images.
 export const IMAGE_HEAD_CHARS = 2000
+
+export const LINK_PREVIEW_URL_MAX_CHARS = 2048
+export const LINK_PREVIEW_MAX_BYTES = 512 * 1024 // HTML read before giving up on finding </head>
+export const LINK_PREVIEW_TIMEOUT_MS = 5_000
+export const LINK_PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000
+export const LINK_PREVIEW_FAILURE_TTL_MS = 60 * 60 * 1000
+export const LINK_PREVIEW_TITLE_MAX_CHARS = 300
+export const LINK_PREVIEW_DESCRIPTION_MAX_CHARS = 500
+export const LINK_PREVIEW_SITE_NAME_MAX_CHARS = 100

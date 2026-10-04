@@ -111,3 +111,18 @@ export interface ImageUploadResponse {
   height: number
   bytes: number
 }
+
+export interface LinkPreview {
+  /** 'failed' when the page could not be fetched or was not HTML; the client then shows the domain only. */
+  status: 'ok' | 'failed'
+  /** The requested URL, as normalized by `new URL()`. */
+  url: string
+  /** The URL after redirects; equals `url` when failed before any response. */
+  finalUrl: string
+  title: string | null
+  description: string | null
+  siteName: string | null
+  /** Absolute http(s) URLs, to be loaded through /api/fetch-image. */
+  image: string | null
+  favicon: string | null
+}
