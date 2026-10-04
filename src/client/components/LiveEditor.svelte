@@ -16,8 +16,9 @@
   import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
   import { cardLabels, cardTheme, linkCards } from '../lib/live/link-cards'
-  import { linkClicks } from '../lib/live/links'
   import { toLf } from '../lib/live/line-endings'
+  import { linkPaste, pasteLabels } from '../lib/live/link-paste'
+  import { linkClicks } from '../lib/live/links'
   import { minimalChange } from '../lib/live/sync'
 
   let {
@@ -85,6 +86,11 @@
           blocksTheme,
           cardTheme,
           paste,
+          linkPaste,
+          pasteLabels.of(() => {
+            const m = messages().editor
+            return { link: m.pasteAsLink, card: m.pasteAsCard, group: m.pasteAsLabel }
+          }),
           placeholderSlot.of(placeholderExtension(untrack(() => placeholder))),
           editableSlot.of(editableExtensions(untrack(() => readonly))),
           EditorView.updateListener.of((update) => {
