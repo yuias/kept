@@ -17,6 +17,8 @@ const ALLOWED_CONTENT_TYPES = new Set([
   'image/webp',
   'image/avif',
   'image/bmp',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
 ])
 
 fetchImageRoutes.get('/api/fetch-image', requireIdentity, async (c) => {
@@ -66,7 +68,7 @@ fetchImageRoutes.get('/api/fetch-image', requireIdentity, async (c) => {
 
   return c.body(bytes.buffer as ArrayBuffer, 200, {
     'content-type': contentType,
-    'cache-control': 'no-store',
+    'cache-control': 'private, max-age=86400',
     'x-content-type-options': 'nosniff',
   })
 })

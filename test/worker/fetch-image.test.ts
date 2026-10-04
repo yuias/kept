@@ -45,7 +45,7 @@ describe('GET /api/fetch-image', () => {
     })
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('image/png')
-    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('cache-control')).toBe('private, max-age=86400')
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(PNG_BYTES)
 
     // Only the upstream URL and the manual-redirect/timeout controls travel
@@ -56,6 +56,17 @@ describe('GET /api/fetch-image', () => {
     expect(init.redirect).toBe('manual')
     expect(init.signal).toBeInstanceOf(AbortSignal)
     expect(init.headers).toBeUndefined()
+  })
+
+  it('passes image/x-icon through with 200', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/x-icon' } })),
+    )
+
+    const response = await fetchImage(createTestEnv(), 'https://example.com/favicon.ico')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/x-icon')
   })
 
   it('rejects text/html with 415 and cancels the unread body', async () => {
