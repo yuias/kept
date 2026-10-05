@@ -118,6 +118,8 @@ function toUpdateInput(raw: Record<string, unknown>): UpdateNoteInput {
   if (pinned !== undefined) input.pinned = pinned
   const archived = requireOptionalBoolean(raw, 'archived')
   if (archived !== undefined) input.archived = archived
+  const locked = requireOptionalBoolean(raw, 'locked')
+  if (locked !== undefined) input.locked = locked
   return input
 }
 

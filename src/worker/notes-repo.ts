@@ -30,6 +30,7 @@ interface NoteRow {
   format: NoteFormat
   pinned: number
   archived: number
+  locked: number
   trashed_at: number | null
   created_at: number
   updated_at: number
@@ -43,6 +44,7 @@ interface NoteListRow {
   format: NoteFormat
   pinned: number
   archived: number
+  locked: number
   trashed_at: number | null
   created_at: number
   updated_at: number
@@ -74,6 +76,7 @@ function toNote(row: NoteRow): Note {
     labels: parseLabelsJson(row.labels_json),
     pinned: row.pinned === 1,
     archived: row.archived === 1,
+    locked: row.locked === 1,
     trashedAt: row.trashed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -91,6 +94,7 @@ function toNoteSummary(row: NoteListRow): NoteSummary {
     labels: parseLabelsJson(row.labels_json),
     pinned: row.pinned === 1,
     archived: row.archived === 1,
+    locked: row.locked === 1,
     trashedAt: row.trashed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -177,8 +181,8 @@ export async function createNote(db: D1Database, owner: string, input: CreateNot
 
   const insertNote = db
     .prepare(
-      `INSERT INTO notes (id, owner, folder_id, title, body, body_plain, format, pinned, archived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'inherit', 0, 0, ?, ?)`,
+      `INSERT INTO notes (id, owner, folder_id, title, body, body_plain, format, pinned, archived, locked, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'inherit', 0, 0, 0, ?, ?)`,
     )
     .bind(id, owner, folderId, title, body, bodyPlain, now, now)
 
@@ -194,6 +198,7 @@ export async function createNote(db: D1Database, owner: string, input: CreateNot
       labels: [],
       pinned: false,
       archived: false,
+      locked: false,
       trashedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -301,8 +306,12 @@ export async function updateNote(
     setClauses.push('pinned = ?')
     setBindings.push(setPinned)
   }
+  if (input.locked !== undefined) {
+    setClauses.push('locked = ?')
+    setBindings.push(input.locked ? 1 : 0)
+  }
 
-  // Pin/archive/format/trash/restore leave updated_at alone; only content-shaped
+  // Pin/archive/format/lock/trash/restore leave updated_at alone; only content-shaped
   // changes bump it.
   if (contentChanged) {
     setClauses.push('updated_at = ?')
@@ -641,7 +650,7 @@ export async function listNotes(db: D1Database, owner: string, options: ListNote
     }
     rowBindings.push(count)
 
-    const sql = `SELECT id, folder_id, title, format, pinned, archived, trashed_at, created_at, updated_at,
+    const sql = `SELECT id, folder_id, title, format, pinned, archived, locked, trashed_at, created_at, updated_at,
       substr(body_plain, 1, ${PREVIEW_CHARS}) AS preview,
       CASE WHEN instr(body, '](/img/') > 0
            THEN substr(body, instr(body, '!['), ${IMAGE_HEAD_CHARS})

@@ -64,7 +64,7 @@ describe('trash and restore', () => {
     expect(trashListAfterRestore.items.map((item) => item.id)).not.toContain(note.id)
   })
 
-  it('leaves updated_at unchanged after pin, format, trash and restore', async () => {
+  it('leaves updated_at unchanged after pin, format, lock, trash and restore', async () => {
     const env = createTestEnv()
     const note = await createNote(env, { title: 'x' })
 
@@ -82,6 +82,18 @@ describe('trash and restore', () => {
     const formatted = (await formatResponse.json()) as Note
     expect(formatted.format).toBe('syntax')
     expect(formatted.updatedAt).toBe(1000)
+
+    const lockResponse = await patchNote(env, note.id, { locked: true })
+    expect(lockResponse.status).toBe(200)
+    const locked = (await lockResponse.json()) as Note
+    expect(locked.locked).toBe(true)
+    expect(locked.updatedAt).toBe(1000)
+
+    const unlockResponse = await patchNote(env, note.id, { locked: false })
+    expect(unlockResponse.status).toBe(200)
+    const unlocked = (await unlockResponse.json()) as Note
+    expect(unlocked.locked).toBe(false)
+    expect(unlocked.updatedAt).toBe(1000)
 
     const trashResponse = await trashNote(env, note.id)
     expect(trashResponse.status).toBe(200)
@@ -111,6 +123,58 @@ describe('trash and restore', () => {
     expect(response.status).toBe(409)
     const errorBody = (await response.json()) as ApiErrorBody
     expect(errorBody.error).toBe('note_trashed')
+  })
+})
+
+describe('note lock', () => {
+  it('starts unlocked and reports the lock from both GET and the list', async () => {
+    const env = createTestEnv()
+    const note = await createNote(env, { title: 'x' })
+    expect(note.locked).toBe(false)
+
+    const lockResponse = await patchNote(env, note.id, { locked: true })
+    expect(lockResponse.status).toBe(200)
+
+    const getResponse = await call(env, `/api/notes/${note.id}`)
+    expect(((await getResponse.json()) as Note).locked).toBe(true)
+    const listed = (await listView(env, 'notes')).items.find((item) => item.id === note.id)
+    expect(listed?.locked).toBe(true)
+  })
+
+  it('rejects a non-boolean locked value with 400', async () => {
+    const env = createTestEnv()
+    const note = await createNote(env, { title: 'x' })
+
+    const response = await patchNote(env, note.id, { locked: 'yes' })
+    expect(response.status).toBe(400)
+  })
+
+  it('does not enforce the lock on body edits', async () => {
+    const env = createTestEnv()
+    const note = await createNote(env, { title: 'x', body: '- [ ] done' })
+    await env.DB.prepare('UPDATE notes SET updated_at = 1000 WHERE id = ?').bind(note.id).run()
+    await patchNote(env, note.id, { locked: true })
+
+    const response = await patchNote(env, note.id, { body: '- [x] done' })
+    expect(response.status).toBe(200)
+    const updated = (await response.json()) as Note
+    expect(updated.body).toBe('- [x] done')
+    expect(updated.updatedAt).toBeGreaterThan(1000)
+    expect(updated.locked).toBe(true)
+  })
+
+  it('rejects unlocking a trashed note and keeps the lock across restore', async () => {
+    const env = createTestEnv()
+    const note = await createNote(env, { title: 'x' })
+    await patchNote(env, note.id, { locked: true })
+    await trashNote(env, note.id)
+
+    const response = await patchNote(env, note.id, { locked: false })
+    expect(response.status).toBe(409)
+    expect(((await response.json()) as ApiErrorBody).error).toBe('note_trashed')
+
+    const restored = (await (await restoreNote(env, note.id)).json()) as Note
+    expect(restored.locked).toBe(true)
   })
 })
 

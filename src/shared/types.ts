@@ -29,6 +29,8 @@ export interface NoteSummary {
   labels: string[]
   pinned: boolean
   archived: boolean
+  /** Read-only in the editor (task checkboxes excepted); not enforced by the API. */
+  locked: boolean
   trashedAt: number | null
   createdAt: number
   updatedAt: number
@@ -60,6 +62,7 @@ export interface UpdateNoteInput {
   labels?: string[]
   pinned?: boolean
   archived?: boolean
+  locked?: boolean
 }
 
 export interface Folder {
