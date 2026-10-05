@@ -1,8 +1,9 @@
 import { markdownLanguage } from '@codemirror/lang-markdown'
 import { LanguageSupport } from '@codemirror/language'
-import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorSelection, EditorState, type Extension, RangeSet } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
+  allowTaskToggle,
   type BlockSpec,
   buildBlockDecorations,
   buildPreviewDecorations,
@@ -11,6 +12,7 @@ import {
   isBulletMark,
   localImageSrc,
   taskToggleChange,
+  tasksDisabled,
 } from './blocks'
 
 function stateFor(doc: string, cursor: number | [number, number] = doc.length): EditorState {
@@ -367,5 +369,37 @@ describe('tables', () => {
   it('emits the image spec for the table source when the caret is on another row', () => {
     expect(kinds(specsFor(doc, 2), 'image')).toHaveLength(1)
     expect(kinds(specsFor(doc, row + 1), 'image')).toEqual([])
+  })
+})
+
+describe('task checkbox availability', () => {
+  const taskDoc = '- [ ] a\n- [x] b\n\nend'
+  const cases: [string, Extension[], boolean][] = [
+    ['editable', [], false],
+    ['read-only', [EditorState.readOnly.of(true)], true],
+    ['read-only with task toggling allowed', [EditorState.readOnly.of(true), allowTaskToggle.of(true)], false],
+  ]
+
+  function taskState(extra: Extension[]): EditorState {
+    return EditorState.create({
+      doc: taskDoc,
+      selection: { anchor: taskDoc.length },
+      extensions: [new LanguageSupport(markdownLanguage), ...extra],
+    })
+  }
+
+  it.each(cases)('draws the checkboxes of an %s editor with the matching disabled flag', (_name, extra, disabled) => {
+    const state = taskState(extra)
+    const set = buildBlockDecorations(state, [{ from: 0, to: state.doc.length }])
+    const flags: boolean[] = []
+    for (const iter = RangeSet.iter([set]); iter.value; iter.next()) {
+      const widget = iter.value.spec.widget as { disabled?: boolean } | undefined
+      if (widget && 'disabled' in widget) flags.push(widget.disabled === true)
+    }
+    expect(flags).toEqual([disabled, disabled])
+  })
+
+  it.each(cases)('tasksDisabled answers for an %s editor', (_name, extra, disabled) => {
+    expect(tasksDisabled(taskState(extra))).toBe(disabled)
   })
 })

@@ -13,7 +13,7 @@
   import { onMount, untrack } from 'svelte'
   import { messages } from '../lib/i18n.svelte'
   import { placeholderRange } from '../lib/image/insert'
-  import { blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
+  import { allowTaskToggle, blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
   import { cardLabels, cardTheme, linkCards } from '../lib/live/link-cards'
   import { toLf } from '../lib/live/line-endings'
@@ -27,12 +27,14 @@
     onchange,
     onpaste,
     readonly = false,
+    tasksToggleable = false,
     placeholder = '',
   }: {
     value?: string
     onchange?: (value: string) => void
     onpaste?: (event: ClipboardEvent) => void
     readonly?: boolean
+    tasksToggleable?: boolean
     placeholder?: string
   } = $props()
 
@@ -48,7 +50,11 @@
   // the full-document comparison on every keystroke.
   let synced = untrack(() => value)
 
-  const editableExtensions = (ro: boolean) => [EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]
+  const editableExtensions = (ro: boolean, tasks: boolean) => [
+    EditorState.readOnly.of(ro),
+    EditorView.editable.of(!ro),
+    allowTaskToggle.of(tasks),
+  ]
 
   onMount(() => {
     const paste = EditorView.domEventHandlers({
@@ -95,7 +101,7 @@
             return { link: m.pasteAsLink, card: m.pasteAsCard, group: m.pasteAsLabel }
           }),
           placeholderSlot.of(placeholderExtension(untrack(() => placeholder))),
-          editableSlot.of(editableExtensions(untrack(() => readonly))),
+          editableSlot.of(editableExtensions(untrack(() => readonly), untrack(() => tasksToggleable))),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || update.transactions.some((tr) => tr.annotation(external))) return
             const next = update.state.doc.toString()
@@ -124,7 +130,8 @@
 
   $effect(() => {
     const ro = readonly
-    view?.dispatch({ effects: editableSlot.reconfigure(editableExtensions(ro)) })
+    const tasks = tasksToggleable
+    view?.dispatch({ effects: editableSlot.reconfigure(editableExtensions(ro, tasks)) })
   })
 
   $effect(() => {

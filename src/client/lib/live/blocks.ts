@@ -242,23 +242,33 @@ export const taskLabel = Facet.define<() => string, () => string>({
   combine: (values) => values[0] ?? (() => ''),
 })
 
+/** Lets task checkboxes be toggled while the editor is read-only (a locked note). */
+export const allowTaskToggle = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+})
+
+/** Whether task checkboxes are inert in this state. */
+export function tasksDisabled(state: EditorState): boolean {
+  return state.readOnly && !state.facet(allowTaskToggle)
+}
+
 class CheckboxWidget extends WidgetType {
   constructor(
     readonly checked: boolean,
-    readonly readOnly: boolean,
+    readonly disabled: boolean,
     readonly label: string,
   ) {
     super()
   }
 
   eq(other: CheckboxWidget): boolean {
-    return other.checked === this.checked && other.readOnly === this.readOnly && other.label === this.label
+    return other.checked === this.checked && other.disabled === this.disabled && other.label === this.label
   }
 
   updateDOM(dom: HTMLElement): boolean {
     const input = dom as HTMLInputElement
     input.checked = this.checked
-    input.disabled = this.readOnly
+    input.disabled = this.disabled
     input.setAttribute('aria-label', this.label)
     return true
   }
@@ -268,14 +278,14 @@ class CheckboxWidget extends WidgetType {
     input.type = 'checkbox'
     input.className = 'cm-live-checkbox'
     input.checked = this.checked
-    input.disabled = this.readOnly
+    input.disabled = this.disabled
     input.setAttribute('aria-label', this.label)
     // Keep the editor's focus and caret; the click alone toggles.
     input.addEventListener('mousedown', (event) => event.preventDefault())
     input.addEventListener('click', (event) => {
       // The document is the source of truth; the widget is redrawn from it.
       event.preventDefault()
-      if (view.state.readOnly) return
+      if (tasksDisabled(view.state)) return
       const from = view.posAtDOM(input)
       const change = taskToggleChange(view.state.sliceDoc(from, from + 3), from)
       if (change) view.dispatch({ changes: change, userEvent: 'input.toggle' })
@@ -392,7 +402,7 @@ export function buildBlockDecorations(state: EditorState, ranges: readonly TextR
       case 'bullet':
         return bulletDecoration.range(spec.from, spec.to)
       case 'checkbox':
-        return Decoration.replace({ widget: new CheckboxWidget(spec.checked, state.readOnly, label) }).range(
+        return Decoration.replace({ widget: new CheckboxWidget(spec.checked, tasksDisabled(state), label) }).range(
           spec.from,
           spec.to,
         )
@@ -426,7 +436,7 @@ const blockPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
-        update.startState.readOnly !== update.state.readOnly ||
+        tasksDisabled(update.startState) !== tasksDisabled(update.state) ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildBlockDecorations(update.state, update.view.visibleRanges)
