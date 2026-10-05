@@ -216,6 +216,7 @@ export const liveDecorations = ViewPlugin.fromClass(
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
+        update.startState.readOnly !== update.state.readOnly ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = buildDecorations(update.state, update.view.visibleRanges)

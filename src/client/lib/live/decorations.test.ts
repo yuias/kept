@@ -26,6 +26,11 @@ describe('activeLineNumbers', () => {
     const state = EditorState.create({ doc: 'a\nb\nc\nd', selection: { anchor: 2, head: 5 } })
     expect([...activeLineNumbers(state)]).toEqual([2, 3])
   })
+
+  it('is empty in a read-only editor', () => {
+    const state = EditorState.create({ doc: 'a\nb', extensions: EditorState.readOnly.of(true) })
+    expect([...activeLineNumbers(state)]).toEqual([])
+  })
 })
 
 describe('headings', () => {

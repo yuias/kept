@@ -436,6 +436,7 @@ const blockPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
+        update.startState.readOnly !== update.state.readOnly ||
         tasksDisabled(update.startState) !== tasksDisabled(update.state) ||
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
