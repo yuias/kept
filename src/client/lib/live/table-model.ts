@@ -1,5 +1,6 @@
 import { syntaxTree } from '@codemirror/language'
 import type { EditorState, Text } from '@codemirror/state'
+import { linkHref } from './links'
 
 // @lezer/common is not a direct dependency, so the node type is derived.
 type SyntaxNode = ReturnType<typeof syntaxTree>['topNode']
@@ -67,10 +68,87 @@ export function readAlignments(delimiterRow: string): Align[] {
   })
 }
 
+function pushText(spans: InlineSpan[], text: string): void {
+  if (text === '') return
+  const last = spans[spans.length - 1]
+  if (last?.kind === 'text') last.text += text
+  else spans.push({ kind: 'text', text })
+}
+
+function pushSpan(spans: InlineSpan[], span: InlineSpan): void {
+  if (span.kind === 'text') pushText(spans, span.text)
+  else spans.push(span)
+}
+
+function readCode(doc: Text, node: SyntaxNode): InlineSpan {
+  const marks = node.getChildren('CodeMark')
+  const open = marks[0]
+  const close = marks[marks.length - 1]
+  if (!open || !close || open === close) return { kind: 'text', text: doc.sliceString(node.from, node.to) }
+  // GFM unescapes the pipe inside code spans in a table; lezer does not.
+  let text = doc.sliceString(open.to, close.from).replaceAll('\\|', '|')
+  if (text.length > 1 && text.startsWith(' ') && text.endsWith(' ') && text.trim() !== '') text = text.slice(1, -1)
+  return { kind: 'code', text }
+}
+
+function readNode(doc: Text, node: SyntaxNode): InlineSpan {
+  const raw = (): InlineSpan => ({ kind: 'text', text: doc.sliceString(node.from, node.to) })
+  switch (node.name) {
+    case 'StrongEmphasis':
+      return { kind: 'strong', children: readSpans(doc, node, node.from, node.to) }
+    case 'Emphasis':
+      return { kind: 'em', children: readSpans(doc, node, node.from, node.to) }
+    case 'Strikethrough':
+      return { kind: 'strike', children: readSpans(doc, node, node.from, node.to) }
+    case 'InlineCode':
+      return readCode(doc, node)
+    case 'Link': {
+      const url = node.getChild('URL')
+      const [open, close] = node.getChildren('LinkMark')
+      // Reference and shortcut forms need a definition lookup, so they stay source.
+      if (!url || !open || !close) return raw()
+      return {
+        kind: 'link',
+        href: linkHref(doc.sliceString(url.from, url.to)),
+        children: readSpans(doc, node, open.to, close.from),
+      }
+    }
+    case 'Autolink':
+    case 'URL': {
+      const url = node.name === 'URL' ? node : node.getChild('URL')
+      if (!url) return raw()
+      const text = doc.sliceString(url.from, url.to)
+      return { kind: 'link', href: linkHref(text), children: [{ kind: 'text', text }] }
+    }
+    case 'Escape':
+      return { kind: 'text', text: doc.sliceString(node.from + 1, node.to) }
+    case 'Image': {
+      const [open, close] = node.getChildren('LinkMark')
+      return open && close ? { kind: 'text', text: doc.sliceString(open.to, close.from) } : raw()
+    }
+    default:
+      return raw()
+  }
+}
+
+// Reads the children of `node` that lie inside [from, to]; text between them is kept.
+function readSpans(doc: Text, node: SyntaxNode, from: number, to: number): InlineSpan[] {
+  const spans: InlineSpan[] = []
+  let pos = from
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.from < from || child.to > to) continue
+    pushText(spans, doc.sliceString(pos, child.from))
+    pos = child.to
+    if (child.name === 'EmphasisMark' || child.name === 'StrikethroughMark') continue
+    pushSpan(spans, readNode(doc, child))
+  }
+  pushText(spans, doc.sliceString(pos, to))
+  return spans
+}
+
 /** Inline content of a TableCell node. */
 export function readInline(doc: Text, cell: SyntaxNode): InlineSpan[] {
-  const text = doc.sliceString(cell.from, cell.to)
-  return text === '' ? [] : [{ kind: 'text', text }]
+  return readSpans(doc, cell, cell.from, cell.to)
 }
 
 // @lezer/markdown emits no TableCell for an empty cell, only the pipes, so

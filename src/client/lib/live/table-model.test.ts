@@ -3,7 +3,14 @@ import { LanguageSupport, syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { activeLineNumbers } from './active-lines'
-import { collectTables, isRenderedTable, readAlignments, type TableBlock, type TableCell } from './table-model'
+import {
+  collectTables,
+  isRenderedTable,
+  readAlignments,
+  type InlineSpan,
+  type TableBlock,
+  type TableCell,
+} from './table-model'
 
 function firstTable(doc: string): TableBlock {
   const [table] = collectTables(stateFor(doc))
@@ -124,5 +131,77 @@ describe('isRenderedTable', () => {
       },
     })
     expect(nested).toBe(false)
+  })
+})
+
+describe('inline cell content', () => {
+  const cellOf = (content: string): TableCell => {
+    const table = firstTable(`| h |\n|---|\n| ${content} |`)
+    expect(table.model.rows).toHaveLength(1)
+    return table.model.rows[0]?.[0] ?? []
+  }
+  const t = (value: string): InlineSpan => ({ kind: 'text', text: value })
+  const link = (href: string | null, ...children: InlineSpan[]): InlineSpan => ({ kind: 'link', href, children })
+
+  it('reads strong, emphasis and strikethrough with the text between them', () => {
+    expect(cellOf('**b** and *i* ~~s~~')).toEqual([
+      { kind: 'strong', children: [t('b')] },
+      t(' and '),
+      { kind: 'em', children: [t('i')] },
+      t(' '),
+      { kind: 'strike', children: [t('s')] },
+    ])
+  })
+
+  it('unescapes the pipe in a code span and keeps the cell in one piece', () => {
+    expect(cellOf('`a \\| b`')).toEqual([{ kind: 'code', text: 'a | b' }])
+  })
+
+  it('merges an escaped pipe into the surrounding text', () => {
+    const table = firstTable('| h | i |\n|---|---|\n| a \\| b | c |')
+    expect(table.model.rows).toEqual([[[t('a | b')], [t('c')]]])
+  })
+
+  it('strips one padding space from a code span but not from an all-space one', () => {
+    expect(cellOf('` a `')).toEqual([{ kind: 'code', text: 'a' }])
+    expect(cellOf('`  `')).toEqual([{ kind: 'code', text: '  ' }])
+  })
+
+  it('reads an inline link', () => {
+    expect(cellOf('[x](https://e.example)')).toEqual([link('https://e.example', t('x'))])
+  })
+
+  it('drops the href of a disallowed link target but keeps its label', () => {
+    expect(cellOf('[x](javascript:alert(1))')).toEqual([link(null, t('x'))])
+  })
+
+  it('keeps a reference link as source text', () => {
+    expect(cellOf('[x][ref]')).toEqual([t('[x][ref]')])
+  })
+
+  it('reads an angle-bracket autolink and a bare URL', () => {
+    const href = 'https://e.example'
+    expect(cellOf('<https://e.example>')).toEqual([link(href, t(href))])
+    expect(cellOf('https://e.example')).toEqual([link(href, t(href))])
+  })
+
+  it('reads a link nested in strong', () => {
+    expect(cellOf('**[x](https://e.example)**')).toEqual([
+      { kind: 'strong', children: [link('https://e.example', t('x'))] },
+    ])
+  })
+
+  it('reads emphasis inside a link label', () => {
+    expect(cellOf('[*x* y](https://e.example)')).toEqual([
+      link('https://e.example', { kind: 'em', children: [t('x')] }, t(' y')),
+    ])
+  })
+
+  it('renders an image as its alt text', () => {
+    expect(cellOf('![alt](a.png)')).toEqual([t('alt')])
+  })
+
+  it('keeps unsupported inline source as raw text and unescapes backslash escapes', () => {
+    expect(cellOf('a\\*b &amp; <b>x</b>')).toEqual([t('a*b &amp; <b>x</b>')])
   })
 })
