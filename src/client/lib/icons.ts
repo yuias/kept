@@ -1,5 +1,7 @@
 export type IconName =
   | 'pin'
+  | 'lock'
+  | 'unlock'
   | 'archive'
   | 'unarchive'
   | 'move'
@@ -18,6 +20,8 @@ export const ICON_PATHS: Record<IconName, readonly string[]> = {
   pin: [
     'M8 1.5a2 2 0 0 1 2 2v3.2l1.8 2.7a.6.6 0 0 1-.5.9H9v3.7a1 1 0 0 1-2 0V10.3H4.7a.6.6 0 0 1-.5-.9L6 6.7V3.5a2 2 0 0 1 2-2Z',
   ],
+  lock: ['M3.5 7.5h9v6h-9z', 'M5.5 7.5V5a2.5 2.5 0 0 1 5 0v2.5'],
+  unlock: ['M3.5 7.5h9v6h-9z', 'M5.5 7.5V5a2.5 2.5 0 0 1 5 0'],
   archive: ['M2 3.5h12v3H2z', 'M3 6.5v6.5h10V6.5', 'M6.5 9h3'],
   unarchive: ['M2 3.5h12v3H2z', 'M3 6.5v6.5h10V6.5', 'M8 12V8.5', 'M6.3 10.2 8 8.5l1.7 1.7'],
   move: ['M1.5 12.5v-9h4.5l1.5 1.5h7v7.5z', 'M5.5 9h5', 'M9 7.5 10.5 9 9 10.5'],

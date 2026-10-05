@@ -70,6 +70,7 @@
   let labelsError = $state<string | null>(null)
   let pinned = $state(false)
   let archived = $state(false)
+  let locked = $state(false)
   let trashedAt = $state<number | null>(null)
   let updatedAt = $state<number | null>(null)
   let loading = $state(initialId !== 'new')
@@ -96,7 +97,8 @@
   // component with nowhere left to persist it.
   const inflightImages = new Set<Promise<void>>()
 
-  const readOnly = $derived(trashedAt !== null)
+  const trashed = $derived(trashedAt !== null)
+  const readOnly = $derived(trashed || locked)
   const effective = $derived(pendingFormat ?? effectiveFormat(format, settings()))
 
   const formatLabel = $derived(effective === 'formatted' ? m.editor.formatFormatted : m.editor.formatSyntax)
@@ -156,6 +158,7 @@
         noteId = created.id
         format = created.format
         trashedAt = created.trashedAt
+        locked = created.locked
         updatedAt = created.updatedAt
         currentFolderId = created.folderId
         savedLabels = created.labels
@@ -258,6 +261,7 @@
       format = note.format
       pinned = note.pinned
       archived = note.archived
+      locked = note.locked
       trashedAt = note.trashedAt
       updatedAt = note.updatedAt
       currentFolderId = note.folderId
@@ -471,6 +475,34 @@
     }
   }
 
+  /** Blurs a focused text-entry element so a field turning read-only drops the mobile keyboard. */
+  function blurEditableFocus(): void {
+    const active = document.activeElement
+    if (
+      active instanceof HTMLElement &&
+      (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active.isContentEditable)
+    ) {
+      active.blur()
+    }
+  }
+
+  async function toggleLock(): Promise<void> {
+    if (!noteId) return
+    const next = !locked
+    // Typed text is committed before the note becomes read-only; a failed flush
+    // leaves the edit local and the error visible, so stop there.
+    if (!(await autosave.flush())) return
+    try {
+      const updated = await updateNote(noteId, { locked: next })
+      // iOS keeps the keyboard up for a focused field that turns read-only, and a
+      // tapped button does not take focus there. Blur only once the lock holds.
+      if (updated.locked) blurEditableFocus()
+      locked = updated.locked
+    } catch (cause) {
+      saveError = describeApiError(cause, m)
+    }
+  }
+
   async function toggleArchived(): Promise<void> {
     if (!noteId) return
     try {
@@ -659,6 +691,7 @@
         onchange={onBodyInput}
         onpaste={handlePaste}
         readonly={readOnly}
+        tasksToggleable={!trashed}
         placeholder={m.editor.takeANote}
       />
     {:else}
@@ -679,12 +712,14 @@
     <div class="note-editor-footer">
       {#if saveError}
         <p class="note-editor-status error">{saveError}</p>
-      {:else if readOnly}
+      {:else if trashed}
         <p class="note-editor-status">{m.editor.readOnlyTrashed}</p>
       {:else if status === 'saving'}
         <p class="note-editor-status">{m.editor.saving}</p>
       {:else if status === 'saved'}
         <p class="note-editor-status">{m.editor.saved}</p>
+      {:else if locked}
+        <p class="note-editor-status">{m.editor.readOnlyLocked}</p>
       {/if}
       {#if noteId && updatedAt !== null}
         <span class="note-editor-edited" title={formatFullTimestamp(updatedAt, locale())}>
@@ -694,7 +729,7 @@
     </div>
 
     <div class="note-editor-actions">
-      {#if readOnly}
+      {#if trashed}
         <button type="button" class="icon-button" aria-label={m.editor.restore} title={m.editor.restore} onclick={restore}>
           <Icon name="restore" />
         </button>
@@ -718,6 +753,17 @@
           onclick={togglePinned}
         >
           <Icon name="pin" filled={pinned} />
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          disabled={!noteId}
+          aria-label={locked ? m.editor.unlock : m.editor.lock}
+          title={locked ? m.editor.unlock : m.editor.lock}
+          aria-pressed={locked}
+          onclick={toggleLock}
+        >
+          <Icon name={locked ? 'lock' : 'unlock'} />
         </button>
         <button
           type="button"
