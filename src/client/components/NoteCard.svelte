@@ -10,7 +10,7 @@
   import { writeNoteDrag } from '../lib/note-drag'
   import Icon from './Icon.svelte'
 
-  type CardPatch = Pick<UpdateNoteInput, 'pinned' | 'archived'>
+  type CardPatch = Pick<UpdateNoteInput, 'pinned' | 'archived' | 'locked'>
 
   let {
     note,
@@ -61,7 +61,7 @@
 
   // An empty note keeps its text strip so the card stays clickable.
   const showText = $derived(
-    note.images.length === 0 || Boolean(note.title || note.preview || note.labels.length > 0),
+    note.images.length === 0 || Boolean(note.title || note.preview || note.labels.length > 0 || note.locked),
   )
   const pinLabel = $derived(note.pinned ? m.editor.unpin : m.editor.pin)
   const archiveLabel = $derived(note.archived ? m.editor.unarchive : m.editor.archive)
@@ -96,8 +96,13 @@
         {#if note.preview}
           <span class="note-preview">{note.preview}</span>
         {/if}
-        {#if note.labels.length > 0}
+        {#if note.labels.length > 0 || note.locked}
           <span class="note-labels">
+            {#if note.locked}
+              <span class="note-card-lock" role="img" aria-label={m.notes.locked} title={m.notes.locked}>
+                <Icon name="lock" size={12} />
+              </span>
+            {/if}
             {#each sortLabelsCaseInsensitive(note.labels) as label (label)}
               <span class="note-label-chip">{label}</span>
             {/each}
@@ -164,6 +169,16 @@
               }}
             >
               {m.notes.moveToFolder}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                closeMenu()
+                void run({ locked: !note.locked })
+              }}
+            >
+              {note.locked ? m.editor.unlock : m.editor.lock}
             </button>
           </span>
         {/if}
@@ -313,6 +328,12 @@
     flex-wrap: wrap;
     gap: 4px;
     max-width: 100%;
+  }
+
+  .note-card-lock {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
   }
 
   .note-label-chip {

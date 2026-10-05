@@ -10,7 +10,7 @@
   }: {
     notes: NoteSummary[]
     onopen: (id: string) => void
-    onupdate: (id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived'>) => Promise<void>
+    onupdate: (id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived' | 'locked'>) => Promise<void>
     onmove: (note: NoteSummary) => void
   } = $props()
 

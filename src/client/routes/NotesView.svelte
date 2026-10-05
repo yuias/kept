@@ -105,7 +105,7 @@
     }
   }
 
-  async function updateFromCard(id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived' | 'folderId'>): Promise<void> {
+  async function updateFromCard(id: string, patch: Pick<UpdateNoteInput, 'pinned' | 'archived' | 'locked' | 'folderId'>): Promise<void> {
     const gen = generation
     try {
       await updateNote(id, patch)
