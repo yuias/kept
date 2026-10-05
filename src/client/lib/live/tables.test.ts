@@ -80,6 +80,10 @@ describe('tableField', () => {
     expect(ranges(unlocked)[0]?.readOnly).toBe(false)
   })
 
+  it('draws a table at the end of the document without a trailing newline', () => {
+    expect(ranges(tableState('z\n\n| a | b |\n|---|---|', 0))).toEqual([{ from: 3, to: 22, block: true, readOnly: false }])
+  })
+
   it('leaves a table inside a blockquote as source', () => {
     expect(ranges(tableState('top\n\n> | a | b |\n> |---|---|\n> | 1 | 2 |\n\nbottom'))).toEqual([])
   })

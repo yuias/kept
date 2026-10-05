@@ -178,3 +178,19 @@ describe('line endings', () => {
     expect(edited.doc.toString()).toBe(`x${doc}`)
   })
 })
+
+describe('tables', () => {
+  const doc = '| **a** | [x](https://e.example) |\n|---|---|\n\nend'
+  const tableEnd = doc.indexOf('\n\nend')
+
+  it('adds no inline spec inside a rendered table', () => {
+    const specs = specsFor(doc, doc.length)
+    expect(specs.filter((s) => s.from < tableEnd)).toEqual([])
+  })
+
+  it('decorates the source while the caret is on a table line', () => {
+    const specs = specsFor(doc, 2)
+    expect(classes(specs)).toContain('cm-live-strong')
+    expect(specs.some((s) => s.kind === 'link')).toBe(true)
+  })
+})

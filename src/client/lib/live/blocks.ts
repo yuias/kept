@@ -16,6 +16,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { isLocalImageUrl } from '../../../shared/images'
 import { activeLineNumbers } from './active-lines'
 import { MARKER_CLASS } from './decorations'
+import { isRenderedTable } from './table-model'
 
 export type BlockSpec =
   | { kind: 'line'; from: number; className: string }
@@ -197,6 +198,8 @@ export function collectBlockSpecs(state: EditorState, ranges: readonly TextRange
             for (const child of ref.node.getChildren('QuoteMark')) quoteMark(child.from, child.to)
             return false
           }
+          case 'Table':
+            return !isRenderedTable(state, active, ref.node)
           default:
             return true
         }

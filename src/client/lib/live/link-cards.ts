@@ -16,24 +16,32 @@ export interface CardLine {
 const CODE_NODES = new Set(['FencedCode', 'CodeBlock', 'InlineCode', 'HTMLBlock', 'CommentBlock'])
 
 export function isInCode(state: EditorState, pos: number): boolean {
+  return isInNode(state, pos, CODE_NODES)
+}
+
+function isInNode(state: EditorState, pos: number, names: ReadonlySet<string>): boolean {
   const tree = syntaxTree(state)
   // Check both sides so a position on a node boundary is judged by either neighbour.
   for (const side of [-1, 1] as const) {
     for (let node: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(pos, side); node; node = node.parent) {
-      if (CODE_NODES.has(node.name) && node.from <= pos && pos <= node.to) return true
+      if (names.has(node.name) && node.from <= pos && pos <= node.to) return true
     }
   }
   return false
 }
 
-/** Every card line in the document that is not inside code. */
+const TABLE_NODES = new Set(['Table'])
+
+/** Every card line in the document that is not inside code or a table. */
 export function collectCardLines(state: EditorState): CardLine[] {
   const cards: CardLine[] = []
   for (let n = 1; n <= state.doc.lines; n++) {
     const line = state.doc.line(n)
     if (!line.text.startsWith('@[card](')) continue
     const url = parseCardLine(line.text)
-    if (url !== null && !isInCode(state, line.from)) cards.push({ from: line.from, to: line.to, url })
+    // GFM continues a table over a directly following line, so that line is a table row.
+    if (url === null || isInCode(state, line.from) || isInNode(state, line.from, TABLE_NODES)) continue
+    cards.push({ from: line.from, to: line.to, url })
   }
   return cards
 }

@@ -20,6 +20,7 @@
   import { linkPaste, pasteLabels } from '../lib/live/link-paste'
   import { linkClicks } from '../lib/live/links'
   import { minimalChange } from '../lib/live/sync'
+  import { liveTables, tableTheme } from '../lib/live/tables'
 
   let {
     value = $bindable(''),
@@ -80,11 +81,13 @@
           liveBlocks,
           linkClicks,
           linkCards,
+          liveTables,
           cardLabels.of(() => ({ edit: messages().editor.editCard })),
           taskLabel.of(() => messages().editor.toggleTask),
           liveTheme,
           blocksTheme,
           cardTheme,
+          tableTheme,
           paste,
           linkPaste,
           pasteLabels.of(() => {

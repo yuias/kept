@@ -38,6 +38,18 @@ describe('collectCardLines', () => {
   })
 })
 
+describe('collectCardLines and tables', () => {
+  it('ignores a card line that GFM takes as a table row', () => {
+    const doc = '| a | b |\n|---|---|\n@[card](https://a.example)\n\n@[card](https://b.example)'
+    expect(collectCardLines(stateFor(doc)).map((c) => c.url)).toEqual(['https://b.example'])
+  })
+
+  it('keeps a card line separated from the table by a blank line', () => {
+    const doc = '| a | b |\n|---|---|\n\n@[card](https://a.example)'
+    expect(collectCardLines(stateFor(doc)).map((c) => c.url)).toEqual(['https://a.example'])
+  })
+})
+
 describe('isInCode', () => {
   it('is true inside fenced code and inline code', () => {
     const doc = '```\nabc\n```\n\nuse `code` here'

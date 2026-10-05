@@ -9,6 +9,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { parseCardLine } from '../../../shared/link-card'
 import { activeLineNumbers } from './active-lines'
 import { linkHref } from './links'
+import { isRenderedTable } from './table-model'
 
 export type LiveSpec =
   | { kind: 'line'; from: number; className: string }
@@ -151,6 +152,9 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
           case 'HTMLTag':
           case 'CommentBlock':
             return false
+          // A rendered table is a block widget; inline replaces under it must not overlap.
+          case 'Table':
+            return !isRenderedTable(state, active, ref.node)
           default:
             return true
         }

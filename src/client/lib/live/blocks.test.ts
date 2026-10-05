@@ -355,3 +355,17 @@ describe('robustness', () => {
     }
   })
 })
+
+describe('tables', () => {
+  const doc = '| a | b |\n|---|---|\n| ![p](/img/abc) | 2 |\n\nend'
+  const row = doc.indexOf('| ![p]')
+
+  it('emits no image spec inside a rendered table', () => {
+    expect(kinds(specsFor(doc), 'image')).toEqual([])
+  })
+
+  it('emits the image spec for the table source when the caret is on another row', () => {
+    expect(kinds(specsFor(doc, 2), 'image')).toHaveLength(1)
+    expect(kinds(specsFor(doc, row + 1), 'image')).toEqual([])
+  })
+})
