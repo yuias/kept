@@ -15,6 +15,8 @@ export interface Autosave<Patch extends object> {
    * attempt failed and a patch is still queued for retry.
    */
   flush(): Promise<boolean>
+  /** True while a patch is queued that no save has taken yet. */
+  hasPending(): boolean
 }
 
 /** `Object.assign`, not `{ ...a, ...b }`: spreading a bare generic type parameter is a TS error. */
@@ -89,6 +91,9 @@ export function createAutosave<Patch extends object>(
       // taking (and awaiting) its own, so one call drains the full chain.
       await send()
       return pending === null
+    },
+    hasPending(): boolean {
+      return pending !== null
     },
   }
 }

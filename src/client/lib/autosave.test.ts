@@ -145,3 +145,35 @@ describe('createAutosave', () => {
     expect(save).toHaveBeenLastCalledWith({ body: 'b' })
   })
 })
+
+describe('hasPending', () => {
+  it('is false at the "saved" status only when nothing queued during the save', async () => {
+    let release: () => void = () => {}
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    const pendingAtSaved: boolean[] = []
+    const autosave = createAutosave<{ body?: string }>(save, 800, (status) => {
+      if (status === 'saved') pendingAtSaved.push(autosave.hasPending())
+    })
+
+    expect(autosave.hasPending()).toBe(false)
+    autosave.update({ body: 'a' })
+    expect(autosave.hasPending()).toBe(true)
+
+    const first = autosave.flush()
+    expect(autosave.hasPending()).toBe(false)
+    autosave.update({ body: 'ab' })
+    release()
+    await first
+
+    const second = autosave.flush()
+    release()
+    await second
+
+    expect(pendingAtSaved).toEqual([true, false])
+  })
+})

@@ -10,6 +10,7 @@
   import { createCopyAction } from '../lib/clipboard.svelte'
   import { formatEdited, formatFullTimestamp } from '../lib/datetime'
   import { isOutsideRect } from '../lib/dialog'
+  import { clearDraft, type Draft, NEW_NOTE_DRAFT, readDraft, writeDraft } from '../lib/drafts'
   import { describeApiError } from '../lib/errors'
   import { formatToCommit, nextFormat, showsDefault } from '../lib/format-toggle'
   import { folderById, folders } from '../lib/folders.svelte'
@@ -76,6 +77,10 @@
   let loading = $state(initialId !== 'new')
   let loadError = $state<string | null>(null)
   let status = $state<AutosaveStatus>('idle')
+  // A draft left by an earlier session that cannot be applied silently: the
+  // note changed elsewhere since, or it was a note never created. Hidden
+  // while the note is read-only, and kept in storage until a choice is made.
+  let recoveredDraft = $state<Draft | null>(null)
   let saveError = $state<string | null>(null)
 
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
@@ -156,6 +161,9 @@
           ...(initialLabels.ok && initialLabels.labels.length > 0 ? { labels: initialLabels.labels } : {}),
         })
         noteId = created.id
+        clearDraft(NEW_NOTE_DRAFT)
+        // Edits typed during the POST are still queued; re-key their draft.
+        if (autosave.hasPending()) saveDraft()
         format = created.format
         trashedAt = created.trashedAt
         locked = created.locked
@@ -193,6 +201,7 @@
     800,
     (next) => {
       status = next === 'saved' && lastSaveWasNoop ? 'idle' : next
+      if (next === 'saved' && !autosave.hasPending()) clearDraft(draftKey())
     },
   )
 
@@ -228,6 +237,7 @@
     el?.addEventListener('pointerdown', handleDialogPointerDown)
     el?.addEventListener('click', handleDialogClick)
     if (initialId !== 'new') void load()
+    else recoveredDraft = readDraft(NEW_NOTE_DRAFT)
     return () => {
       el?.removeEventListener('pointerdown', handleDialogPointerDown)
       el?.removeEventListener('click', handleDialogClick)
@@ -267,6 +277,7 @@
       currentFolderId = note.folderId
       savedLabels = note.labels
       labelsText = note.labels.join(', ')
+      recoverDraft(note.updatedAt)
     } catch (cause) {
       loadError = describeApiError(cause, m)
     } finally {
@@ -274,19 +285,66 @@
     }
   }
 
+  function draftKey(): string {
+    return noteId ?? NEW_NOTE_DRAFT
+  }
+
+  // Written on every edit, before any request: a reload can interrupt a save
+  // at any point, and only a confirmed save clears it. The format toggle is
+  // left out; it is committed separately on close and is cheap to redo.
+  function saveDraft(): void {
+    writeDraft(draftKey(), { title, body, labelsText, baseUpdatedAt: updatedAt })
+  }
+
+  function recoverDraft(serverUpdatedAt: number): void {
+    const draft = readDraft(draftKey())
+    if (!draft) return
+    if (draft.title === title && draft.body === body && draft.labelsText === labelsText) {
+      // The save landed but the page went away before hearing back.
+      clearDraft(draftKey())
+    } else if (draft.baseUpdatedAt === serverUpdatedAt && !readOnly) {
+      applyDraft(draft)
+    } else {
+      recoveredDraft = draft
+    }
+  }
+
+  function applyDraft(draft: Draft): void {
+    recoveredDraft = null
+    const titleChanged = draft.title !== title
+    const bodyChanged = draft.body !== body
+    const labelsChanged = draft.labelsText !== labelsText
+    title = draft.title
+    body = draft.body
+    labelsText = draft.labelsText
+    // Through the normal input paths, so the restored text is validated,
+    // queued, and its draft re-based on the current note.
+    if (titleChanged) onTitleInput()
+    if (bodyChanged) onBodyInput()
+    if (labelsChanged) onLabelsInput()
+  }
+
+  function discardDraft(): void {
+    recoveredDraft = null
+    clearDraft(draftKey())
+  }
+
   function onTitleInput(): void {
     if (!noteId && !creating && !hasContent()) return
+    saveDraft()
     autosave.update({ title })
   }
 
   function onBodyInput(): void {
     if (!noteId && !creating && !hasContent()) return
+    saveDraft()
     autosave.update({ body })
   }
 
   function onLabelsInput(): void {
     labelsError = null
     if (!noteId && !creating && !hasContent()) return
+    saveDraft()
 
     const result = normalizeLabels(parseLabelInput(labelsText))
     if (!result.ok) {
@@ -584,6 +642,7 @@
     if (!confirm(m.editor.deleteForeverConfirm)) return
     try {
       await deleteNoteForever(noteId)
+      clearDraft(noteId)
       close()
     } catch (cause) {
       saveError = describeApiError(cause, m)
@@ -664,6 +723,16 @@
     {#if labelsError}
       <p class="note-editor-status error">{labelsError}</p>
     {/if}
+    {#if recoveredDraft && !readOnly}
+      {@const draft = recoveredDraft}
+      <p class="note-editor-status" role="status">
+        {noteId ? m.editor.draftConflict : m.editor.draftNew}
+        <button type="button" class="note-editor-inline-action" onclick={() => applyDraft(draft)}>
+          {m.editor.draftRestore}
+        </button>
+        <button type="button" class="note-editor-inline-action" onclick={discardDraft}>{m.editor.draftDiscard}</button>
+      </p>
+    {/if}
     {#if !readOnly}
       <div class="note-editor-toolbar">
         <button type="button" onclick={toggleFormat}>
@@ -702,7 +771,7 @@
       <p class="note-editor-status" class:error={task.status === 'error'}>
         {task.status === 'uploading' ? m.editor.imageUploading : m.editor.imageFailed(task.error ?? '')}
         {#if task.status === 'error'}
-          <button type="button" class="note-editor-image-dismiss" onclick={() => dismissImageTask(task.token)}>
+          <button type="button" class="note-editor-inline-action" onclick={() => dismissImageTask(task.token)}>
             {m.editor.dismiss}
           </button>
         {/if}
@@ -909,7 +978,7 @@
     color: var(--text-muted);
   }
 
-  .note-editor-image-dismiss {
+  .note-editor-inline-action {
     margin-left: 6px;
     font-size: 0.8rem;
   }
