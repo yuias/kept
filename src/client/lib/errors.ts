@@ -55,7 +55,7 @@ export function describeApiError(error: unknown, messages: Messages): string {
     case 'image_encode_failed':
       return messages.errors.imageEncodeFailed
     case 'session_expired':
-      return messages.errors.sessionStale
+      return messages.errors.unauthorized
     case 'unexpected_response':
       return messages.errors.internalError
     default:
