@@ -161,13 +161,14 @@
           ...(initialLabels.ok && initialLabels.labels.length > 0 ? { labels: initialLabels.labels } : {}),
         })
         noteId = created.id
-        clearDraft(NEW_NOTE_DRAFT)
-        // Edits typed during the POST are still queued; re-key their draft.
-        if (autosave.hasPending()) saveDraft()
         format = created.format
         trashedAt = created.trashedAt
         locked = created.locked
         updatedAt = created.updatedAt
+        clearDraft(NEW_NOTE_DRAFT)
+        // Edits typed during the POST are still queued; re-key their draft
+        // under the id, based on the note as just created.
+        if (autosave.hasPending()) saveDraft()
         currentFolderId = created.folderId
         savedLabels = created.labels
         if (open) openNote(created.id, { replace: true })
