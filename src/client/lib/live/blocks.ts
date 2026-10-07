@@ -15,7 +15,7 @@ import { type EditorState, type Extension, Facet, type Range, StateField, type T
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
 import { isLocalImageUrl } from '../../../shared/images'
 import { activeLineNumbers } from './active-lines'
-import { MARKER_CLASS } from './decorations'
+import { CODE_TINT, MARKER_CLASS } from './decorations'
 import { isRenderedTable } from './table-model'
 
 export type BlockSpec =
@@ -470,7 +470,7 @@ export const blocksTheme = EditorView.theme({
   '.cm-line.cm-live-codeblock': {
     fontFamily: 'var(--mono)',
     fontSize: '0.92em',
-    background: 'var(--surface-muted)',
+    background: CODE_TINT,
     padding: '0 10px',
   },
   '.cm-line.cm-live-codeblock-first': { borderTopLeftRadius: '6px', borderTopRightRadius: '6px', paddingTop: '4px' },

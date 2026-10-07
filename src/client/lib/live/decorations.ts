@@ -226,6 +226,13 @@ export const liveDecorations = ViewPlugin.fromClass(
   { decorations: (plugin) => plugin.decorations },
 )
 
+/**
+ * Translucent rather than `--surface-muted`: `drawSelection` paints the
+ * selection in a layer behind the text, so an opaque line background would
+ * hide it.
+ */
+export const CODE_TINT = 'color-mix(in srgb, var(--text) 6%, transparent)'
+
 const headingSizes: Record<number, string> = { 1: '1.7em', 2: '1.45em', 3: '1.25em', 4: '1.1em', 5: '1em', 6: '0.95em' }
 
 /** Colours come from the app palette variables, so light/dark needs no separate theme. */
@@ -253,7 +260,7 @@ export const liveTheme = EditorView.theme({
   '.cm-live-code': {
     fontFamily: 'var(--mono)',
     fontSize: '0.92em',
-    background: 'var(--surface-muted)',
+    background: CODE_TINT,
     borderRadius: '4px',
     padding: '0 3px',
   },
