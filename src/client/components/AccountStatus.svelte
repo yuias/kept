@@ -1,17 +1,9 @@
 <script lang="ts">
   import { messages } from '../lib/i18n.svelte'
-  import { session } from '../lib/session.svelte'
+  import { SIGN_IN_URL, SIGN_OUT_URL, session } from '../lib/session.svelte'
 
   const me = $derived(session())
   const m = $derived(messages())
-
-  /**
-   * Cloudflare Access answers both of these itself; neither reaches the Worker,
-   * and both must be plain navigations rather than SPA routing. Signing out is
-   * also how a user switches between the available login methods.
-   */
-  const SIGN_IN_URL = '/'
-  const SIGN_OUT_URL = '/cdn-cgi/access/logout'
 </script>
 
 {#if me.loaded}

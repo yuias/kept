@@ -4,15 +4,18 @@
   import Sidebar from './components/Sidebar.svelte'
   import NotesView from './routes/NotesView.svelte'
   import SettingsPage from './routes/SettingsPage.svelte'
+  import SessionLostDialog from './components/SessionLostDialog.svelte'
   import { messages } from './lib/i18n.svelte'
   import { closeMenu } from './lib/menu.svelte'
   import { closeDrawer } from './lib/sidebar.svelte'
   import { currentRoute } from './lib/router.svelte'
   import { listQueryFor } from './lib/routes'
+  import { sessionLoss } from './lib/session.svelte'
 
   const route = $derived(currentRoute())
   const query = $derived(listQueryFor(route))
   const m = $derived(messages())
+  const loss = $derived(sessionLoss())
 
   // Every navigation, note open and Back press reassigns the route object,
   // and each one also closes the phone drawer.
@@ -40,3 +43,7 @@
     </main>
   </div>
 </div>
+
+{#if loss}
+  <SessionLostDialog kind={loss} />
+{/if}

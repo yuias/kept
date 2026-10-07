@@ -155,6 +155,15 @@ export const en = {
     urlPlaceholder: 'https://example.com/image.png',
     insert: 'Insert',
   },
+  sessionDialog: {
+    expiredTitle: 'Session expired',
+    expiredBody: 'Sign in again to keep working. Changes made since the session expired have not been saved.',
+    staleTitle: 'Session not accepted',
+    staleBody: 'Sign out, then sign in again to keep working. Changes made in this state have not been saved.',
+    signIn: 'Sign in again',
+    signOut: 'Sign out',
+    later: 'Not now',
+  },
   errors: {
     badRequest: 'That request was invalid.',
     badQuery: 'That search could not be understood.',

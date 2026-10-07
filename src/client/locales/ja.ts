@@ -147,6 +147,15 @@ export const ja: Messages = {
     urlPlaceholder: 'https://example.com/image.png',
     insert: '挿入',
   },
+  sessionDialog: {
+    expiredTitle: 'セッションの期限が切れました',
+    expiredBody: '続けるにはもう一度ログインしてください。期限切れ以降の変更は保存されていません。',
+    staleTitle: 'セッションが受け付けられません',
+    staleBody: '続けるには一度ログアウトしてから、ログインし直してください。この状態での変更は保存されていません。',
+    signIn: 'もう一度ログイン',
+    signOut: 'ログアウト',
+    later: 'あとで',
+  },
   errors: {
     badRequest: 'リクエストが正しくありません。',
     badQuery: '検索条件を解釈できませんでした。',
