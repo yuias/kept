@@ -17,6 +17,14 @@ export interface Autosave<Patch extends object> {
   flush(): Promise<boolean>
   /** True while a patch is queued that no save has taken yet. */
   hasPending(): boolean
+  /**
+   * Stops the debounce timer until `release()`; `update()` still queues
+   * patches meanwhile. For IME composition, whose input events carry text
+   * the user has not confirmed yet. `flush()` ignores the hold.
+   */
+  hold(): void
+  /** Ends a `hold()` and restarts the debounce timer if a patch is queued. */
+  release(): void
 }
 
 /** `Object.assign`, not `{ ...a, ...b }`: spreading a bare generic type parameter is a TS error. */
@@ -32,6 +40,7 @@ export function createAutosave<Patch extends object>(
   let pending: Patch | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let inFlight: Promise<void> | null = null
+  let held = false
 
   function clearTimer(): void {
     if (timer !== null) {
@@ -42,6 +51,7 @@ export function createAutosave<Patch extends object>(
 
   function schedule(): void {
     clearTimer()
+    if (held) return
     timer = setTimeout(() => {
       void send()
     }, delayMs)
@@ -94,6 +104,14 @@ export function createAutosave<Patch extends object>(
     },
     hasPending(): boolean {
       return pending !== null
+    },
+    hold(): void {
+      held = true
+      clearTimer()
+    },
+    release(): void {
+      held = false
+      if (pending) schedule()
     },
   }
 }

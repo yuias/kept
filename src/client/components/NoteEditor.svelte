@@ -693,7 +693,16 @@
   }
 </script>
 
-<dialog bind:this={dialogEl} class="note-editor" onclose={handleDialogClose} oncancel={handleCancel}>
+<!-- Composition events bubble from every field, the live editor included;
+     an unconfirmed IME conversion must not reach the server. -->
+<dialog
+  bind:this={dialogEl}
+  class="note-editor"
+  onclose={handleDialogClose}
+  oncancel={handleCancel}
+  oncompositionstart={() => autosave.hold()}
+  oncompositionend={() => autosave.release()}
+>
   {#if loading}
     <p class="note-editor-status">{m.notes.loading}</p>
   {:else if loadError}

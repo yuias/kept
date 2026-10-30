@@ -176,4 +176,63 @@ describe('hasPending', () => {
 
     expect(pendingAtSaved).toEqual([true, false])
   })
+
+})
+
+describe('hold', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('holds the debounce while composing and restarts the full delay on release', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
+    const autosave = createAutosave<{ body?: string }>(save, 800, () => {})
+
+    autosave.hold()
+    autosave.update({ body: 'か' })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(save).not.toHaveBeenCalled()
+
+    autosave.update({ body: '漢' })
+    autosave.release()
+    await vi.advanceTimersByTimeAsync(799)
+    expect(save).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save).toHaveBeenCalledExactlyOnceWith({ body: '漢' })
+  })
+
+  it('does not chain a follow-up save while held', async () => {
+    let resolveFirst: (() => void) | undefined
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValue(undefined)
+    const autosave = createAutosave<{ body?: string }>(save, 800, () => {})
+
+    autosave.update({ body: 'a' })
+    await vi.advanceTimersByTimeAsync(800)
+    autosave.hold()
+    autosave.update({ body: 'ab' })
+    resolveFirst?.()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(save).toHaveBeenCalledTimes(1)
+
+    autosave.release()
+    await vi.advanceTimersByTimeAsync(800)
+    expect(save).toHaveBeenLastCalledWith({ body: 'ab' })
+  })
+
+  it('flush sends a held patch', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
+    const autosave = createAutosave<{ body?: string }>(save, 800, () => {})
+
+    autosave.hold()
+    autosave.update({ body: 'か' })
+    await expect(autosave.flush()).resolves.toBe(true)
+    expect(save).toHaveBeenCalledExactlyOnceWith({ body: 'か' })
+  })
 })
