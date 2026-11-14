@@ -1,5 +1,6 @@
 import { syntaxTree } from '@codemirror/language'
-import { EditorSelection, type EditorState, type SelectionRange, type StateCommand } from '@codemirror/state'
+import { EditorSelection, type EditorState, type Extension, Prec, type SelectionRange, type StateCommand } from '@codemirror/state'
+import { type KeyBinding, keymap } from '@codemirror/view'
 
 export type InlineFormat = 'strong' | 'emphasis' | 'code' | 'strike'
 
@@ -108,3 +109,13 @@ export function toggleInlineFormat(format: InlineFormat): StateCommand {
     return true
   }
 }
+
+export const formatKeymap: readonly KeyBinding[] = [
+  { key: 'Mod-b', run: toggleInlineFormat('strong') },
+  { key: 'Mod-i', run: toggleInlineFormat('emphasis') },
+  { key: 'Mod-e', run: toggleInlineFormat('code') },
+  { key: 'Mod-Shift-x', run: toggleInlineFormat('strike') },
+]
+
+// Above defaultKeymap, whose Mod-i is selectParentSyntax.
+export const formatKeys: Extension = Prec.high(keymap.of(formatKeymap))

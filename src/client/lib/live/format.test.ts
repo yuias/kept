@@ -1,8 +1,10 @@
 import { markdownLanguage } from '@codemirror/lang-markdown'
 import { LanguageSupport, syntaxTree } from '@codemirror/language'
 import { EditorSelection, EditorState, type Extension, type SelectionRange, type Transaction } from '@codemirror/state'
+import { defaultKeymap } from '@codemirror/commands'
+import { keymap } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
-import { type InlineFormat, toggleInlineFormat } from './format'
+import { formatKeymap, formatKeys, type InlineFormat, toggleInlineFormat } from './format'
 
 // `|` is a cursor, `«…»` a selection (anchor at «, head at »), `»…«` a reversed one.
 function parse(marked: string, extensions: Extension[] = []): EditorState {
@@ -174,5 +176,16 @@ describe('toggleInlineFormat: command contract', () => {
     let tr: Transaction | undefined
     expect(toggleInlineFormat('strong')({ state, dispatch: (t) => (tr = t) })).toBe(true)
     expect(tr?.isUserEvent('input.format')).toBe(true)
+  })
+})
+
+describe('formatKeys', () => {
+  it('binds the four shortcuts', () => {
+    expect(formatKeymap.map((b) => b.key)).toEqual(['Mod-b', 'Mod-i', 'Mod-e', 'Mod-Shift-x'])
+  })
+
+  it('takes Mod-i over selectParentSyntax from defaultKeymap', () => {
+    const state = EditorState.create({ extensions: [keymap.of(defaultKeymap), formatKeys] })
+    expect(state.facet(keymap).flat().find((b) => b.key === 'Mod-i')).toBe(formatKeymap[1])
   })
 })

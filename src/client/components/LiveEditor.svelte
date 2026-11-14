@@ -15,6 +15,7 @@
   import { placeholderRange } from '../lib/image/insert'
   import { allowTaskToggle, blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
+  import { formatKeys } from '../lib/live/format'
   import { cardLabels, cardTheme, linkCards } from '../lib/live/link-cards'
   import { toLf } from '../lib/live/line-endings'
   import { linkPaste, pasteLabels } from '../lib/live/link-paste'
@@ -77,6 +78,7 @@
           history(),
           drawSelection(),
           highlightSpecialChars(),
+          formatKeys,
           keymap.of([...defaultKeymap, ...historyKeymap]),
           // No syntax highlighter on purpose: `liveDecorations` does the styling.
           // Markdown key bindings continue lists on Enter.
