@@ -59,6 +59,11 @@ export function toggleInlineFormat(format: InlineFormat): StateCommand {
     const perRange = (range: SelectionRange) => {
       const element = enclosing(state, range.from, range.to, node, mark)
       if (element) {
+        // Word-processor style: toggling at the end of the run being typed
+        // steps out of it instead of removing it.
+        if (range.empty && range.head === element.close.from) {
+          return { range: EditorSelection.cursor(element.close.to) }
+        }
         const changes = state.changes([
           { from: element.open.from, to: element.open.to },
           { from: element.close.from, to: element.close.to },

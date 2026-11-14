@@ -150,11 +150,11 @@ describe('toggleInlineFormat: remove from an existing element', () => {
     ['strong', '|**bold**', '|bold'],
     ['strong', '«**bold**»', '«bold»'],
     ['strong', '**b«ol»d**', 'b«ol»d'],
-    ['strong', '__b|__', 'b|'],
+    ['strong', '__|b__', '|b'],
     ['emphasis', '_e|m_', 'e|m'],
     ['code', '`c|ode`', 'c|ode'],
     ['code', '``a|`b``', 'a|`b'],
-    ['strike', '~~s|~~', 's|'],
+    ['strike', '~~|s~~', '|s'],
     ['strong', '***fo|o***', '*fo|o*'],
     ['emphasis', '***fo|o***', '**fo|o**'],
   ])('%s: %s -> %s', (format, before, after) => {
@@ -187,5 +187,18 @@ describe('formatKeys', () => {
   it('takes Mod-i over selectParentSyntax from defaultKeymap', () => {
     const state = EditorState.create({ extensions: [keymap.of(defaultKeymap), formatKeys] })
     expect(state.facet(keymap).flat().find((b) => b.key === 'Mod-i')).toBe(formatKeymap[1])
+  })
+})
+
+describe('cursor at the end of a run', () => {
+  it.each<[InlineFormat, string, string]>([
+    ['strong', '**bold|**', '**bold**|'],
+    ['emphasis', '*em|*', '*em*|'],
+    ['code', '`c|`', '`c`|'],
+    ['strike', '~~s|~~', '~~s~~|'],
+    ['strong', '***foo|***', '***foo**|*'],
+    ['emphasis', '***foo**|*', '***foo***|'],
+  ])('%s on %s steps out to %s', (format, input, expected) => {
+    expect(run(format, input)).toBe(expected)
   })
 })
