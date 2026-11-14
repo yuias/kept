@@ -112,9 +112,32 @@ describe('toggleInlineFormat: wrap a selection', () => {
   it('wraps every range', () => {
     expect(run('strong', '«a» «b»')).toBe('**«a»** **«b»**')
   })
+})
 
-  it('leaves an empty range outside an element unchanged', () => {
-    expect(run('strong', 'a| b')).toBe('a| b')
+describe('toggleInlineFormat: empty selection outside an element', () => {
+  it.each<[InlineFormat, string, string]>([
+    ['strong', 'hel|lo world', '**hel|lo** world'],
+    ['strong', 'hello| world', '**hello|** world'],
+    ['strong', 'hello |world', 'hello **|world**'],
+    ['strong', 'foo_bar|', '**foo_bar|**'],
+    ['strong', '*e|m*', '***e|m***'],
+    ['strong', 'a | b', 'a **|** b'],
+    ['code', '|', '`|`'],
+    ['strike', 'x|', '~~x|~~'],
+  ])('%s: %s -> %s', (format, before, after) => {
+    expect(run(format, before)).toBe(after)
+  })
+
+  it('wraps a word at every cursor', () => {
+    expect(run('strong', 'a| b|')).toBe('**a|** **b|**')
+  })
+
+  it('wraps a single word of a Japanese sentence, not the whole clause', () => {
+    const out = run('strong', '今日はいい天|気です')
+    expect(out.split('**')).toHaveLength(3)
+    const wrapped = out.split('**')[1]?.replace('|', '') ?? ''
+    expect(wrapped).toContain('天')
+    expect(wrapped.length).toBeLessThan('今日はいい天気です'.length)
   })
 })
 

@@ -31,6 +31,23 @@ function enclosing(state: EditorState, from: number, to: number, node: string, m
   return best
 }
 
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
+
+// CodeMirror's own word lookup treats a whole run of kana/kanji as one word, which
+// would wrap a full Japanese clause; the segmenter splits it into real words.
+// Picks the word-like segment ending at or containing pos, else the one starting at pos.
+function wordAt(state: EditorState, pos: number): { from: number; to: number } | null {
+  const line = state.doc.lineAt(pos)
+  const offset = pos - line.from
+  const segments = segmenter.segment(line.text)
+  for (const at of [offset - 1, offset]) {
+    if (at < 0 || at >= line.text.length) continue
+    const seg = segments.containing(at)
+    if (seg?.isWordLike) return { from: line.from + seg.index, to: line.from + seg.index + seg.segment.length }
+  }
+  return null
+}
+
 /** Toggles `format` for every selection range; does nothing (returns false) when read-only. */
 export function toggleInlineFormat(format: InlineFormat): StateCommand {
   const { marker, node, mark } = FORMATS[format]
@@ -51,7 +68,22 @@ export function toggleInlineFormat(format: InlineFormat): StateCommand {
         }
       }
 
-      if (range.empty) return { range }
+      if (range.empty) {
+        const word = wordAt(state, range.head)
+        if (!word) {
+          return {
+            changes: { from: range.head, insert: marker + marker },
+            range: EditorSelection.cursor(range.head + marker.length),
+          }
+        }
+        return {
+          changes: [
+            { from: word.from, insert: marker },
+            { from: word.to, insert: marker },
+          ],
+          range: EditorSelection.cursor(range.head + marker.length),
+        }
+      }
 
       // A trailing space inside the markers (`**foo **`) would not parse as emphasis.
       const text = state.sliceDoc(range.from, range.to)
