@@ -18,12 +18,14 @@
     onupdate,
     onmove,
     ontrash,
+    onrestore,
   }: {
     note: NoteSummary
     onopen: (id: string) => void
     onupdate: (id: string, patch: CardPatch) => Promise<void>
     onmove: (note: NoteSummary) => void
     ontrash: (id: string) => Promise<void>
+    onrestore: (id: string) => Promise<void>
   } = $props()
 
   const m = $derived(messages())
@@ -117,8 +119,8 @@
       </span>
     {/if}
   </button>
-  {#if note.trashedAt === null}
-    <span class="note-card-actions">
+  <span class="note-card-actions">
+    {#if note.trashedAt === null}
       <button
         type="button"
         class="icon-button"
@@ -151,21 +153,34 @@
       >
         <Icon name={copyAction.state === 'copied' ? 'check' : 'copy'} size={14} />
       </button>
-      <span class="note-card-menu" use:menuRoot={menuKey}>
-        <button
-          type="button"
-          class="icon-button note-card-menu-trigger"
-          aria-label={m.notes.cardActions}
-          title={m.notes.cardActions}
-          aria-haspopup="menu"
-          aria-expanded={isMenuOpen(menuKey)}
-          disabled={busy}
-          onclick={() => toggleMenu(menuKey)}
-        >
-          <span class="note-card-menu-glyph" aria-hidden="true">⋯</span>
-        </button>
-        {#if isMenuOpen(menuKey)}
-          <span class="popup-menu" role="menu">
+    {/if}
+    <span class="note-card-menu" use:menuRoot={menuKey}>
+      <button
+        type="button"
+        class="icon-button note-card-menu-trigger"
+        aria-label={m.notes.cardActions}
+        title={m.notes.cardActions}
+        aria-haspopup="menu"
+        aria-expanded={isMenuOpen(menuKey)}
+        disabled={busy}
+        onclick={() => toggleMenu(menuKey)}
+      >
+        <span class="note-card-menu-glyph" aria-hidden="true">⋯</span>
+      </button>
+      {#if isMenuOpen(menuKey)}
+        <span class="popup-menu" role="menu">
+          {#if note.trashedAt !== null}
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                closeMenu()
+                void run(() => onrestore(note.id))
+              }}
+            >
+              {m.editor.restore}
+            </button>
+          {:else}
             <button
               type="button"
               role="menuitem"
@@ -196,11 +211,11 @@
             >
               {m.editor.trash}
             </button>
-          </span>
-        {/if}
-      </span>
+          {/if}
+        </span>
+      {/if}
     </span>
-  {/if}
+  </span>
 </div>
 
 <style>

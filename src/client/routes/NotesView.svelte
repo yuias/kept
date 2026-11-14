@@ -4,7 +4,7 @@
   import FolderPicker from '../components/FolderPicker.svelte'
   import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
-  import { emptyTrash as emptyTrashRequest, listNotes, trashNote, updateNote } from '../lib/api'
+  import { emptyTrash as emptyTrashRequest, listNotes, restoreNote, trashNote, updateNote } from '../lib/api'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
@@ -118,10 +118,11 @@
   }
 
   // The editor is closed, so no autosave can be pending for this note.
-  async function trashFromCard(id: string): Promise<void> {
+  // Trashing and restoring both change label counts.
+  async function setTrashedFromCard(id: string, trashed: boolean): Promise<void> {
     const gen = generation
     try {
-      await trashNote(id)
+      await (trashed ? trashNote(id) : restoreNote(id))
     } catch (e) {
       if (gen !== generation) return
       error = describeApiError(e, m)
@@ -200,14 +201,14 @@
   {:else if query.view === 'notes'}
     {#if pinned.length > 0}
       <h2 class="notes-heading">{m.notes.pinned}</h2>
-      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
+      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={(id) => setTrashedFromCard(id, true)} onrestore={(id) => setTrashedFromCard(id, false)} />
       {#if others.length > 0}
         <h2 class="notes-heading">{m.notes.others}</h2>
       {/if}
     {/if}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={(id) => setTrashedFromCard(id, true)} onrestore={(id) => setTrashedFromCard(id, false)} />
   {:else}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={(id) => setTrashedFromCard(id, true)} onrestore={(id) => setTrashedFromCard(id, false)} />
   {/if}
 
   {#if movingNote}
