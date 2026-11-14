@@ -4,7 +4,7 @@
   import FolderPicker from '../components/FolderPicker.svelte'
   import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
-  import { emptyTrash as emptyTrashRequest, listNotes, updateNote } from '../lib/api'
+  import { emptyTrash as emptyTrashRequest, listNotes, trashNote, updateNote } from '../lib/api'
   import { describeApiError } from '../lib/errors'
   import { folderById, folders } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
@@ -117,6 +117,20 @@
     await load({ quiet: true })
   }
 
+  // The editor is closed, so no autosave can be pending for this note.
+  async function trashFromCard(id: string): Promise<void> {
+    const gen = generation
+    try {
+      await trashNote(id)
+    } catch (e) {
+      if (gen !== generation) return
+      error = describeApiError(e, m)
+      return
+    }
+    void reloadLabels()
+    await load({ quiet: true })
+  }
+
   function handleMovePick(folderId: string | null): void {
     const note = movingNote
     movingNote = null
@@ -186,14 +200,14 @@
   {:else if query.view === 'notes'}
     {#if pinned.length > 0}
       <h2 class="notes-heading">{m.notes.pinned}</h2>
-      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
+      <NoteGrid notes={pinned} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
       {#if others.length > 0}
         <h2 class="notes-heading">{m.notes.others}</h2>
       {/if}
     {/if}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
   {:else}
-    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} />
+    <NoteGrid notes={others} onopen={openNote} onupdate={updateFromCard} onmove={(note) => (movingNote = note)} ontrash={trashFromCard} />
   {/if}
 
   {#if movingNote}

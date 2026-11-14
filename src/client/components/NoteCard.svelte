@@ -17,11 +17,13 @@
     onopen,
     onupdate,
     onmove,
+    ontrash,
   }: {
     note: NoteSummary
     onopen: (id: string) => void
     onupdate: (id: string, patch: CardPatch) => Promise<void>
     onmove: (note: NoteSummary) => void
+    ontrash: (id: string) => Promise<void>
   } = $props()
 
   const m = $derived(messages())
@@ -30,13 +32,17 @@
   let dragging = $state(false)
   const menuKey = $derived(`note:${note.id}`)
 
-  async function run(patch: CardPatch): Promise<void> {
+  async function run(action: () => Promise<void>): Promise<void> {
     busy = true
     try {
-      await onupdate(note.id, patch)
+      await action()
     } finally {
       busy = false
     }
+  }
+
+  function update(patch: CardPatch): Promise<void> {
+    return run(() => onupdate(note.id, patch))
   }
 
   // The summary has no body, so the note is fetched; copyText starts the
@@ -121,7 +127,7 @@
         aria-label={pinLabel}
         title={pinLabel}
         disabled={busy}
-        onclick={() => run({ pinned: !note.pinned })}
+        onclick={() => update({ pinned: !note.pinned })}
       >
         <Icon name="pin" filled={note.pinned} size={14} />
       </button>
@@ -131,7 +137,7 @@
         aria-label={archiveLabel}
         title={archiveLabel}
         disabled={busy}
-        onclick={() => run({ archived: !note.archived })}
+        onclick={() => update({ archived: !note.archived })}
       >
         <Icon name={note.archived ? 'unarchive' : 'archive'} size={14} />
       </button>
@@ -175,10 +181,20 @@
               role="menuitem"
               onclick={() => {
                 closeMenu()
-                void run({ locked: !note.locked })
+                void update({ locked: !note.locked })
               }}
             >
               {note.locked ? m.editor.unlock : m.editor.lock}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                closeMenu()
+                void run(() => ontrash(note.id))
+              }}
+            >
+              {m.editor.trash}
             </button>
           </span>
         {/if}
