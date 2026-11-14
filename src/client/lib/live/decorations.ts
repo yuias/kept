@@ -7,7 +7,7 @@ import { syntaxTree } from '@codemirror/language'
 import { type EditorState, type Range } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { parseCardLine } from '../../../shared/link-card'
-import { activeLineNumbers } from './active-lines'
+import { activeLineNumbers, touchesSelection } from './active-lines'
 import { linkHref } from './links'
 import { isRenderedTable } from './table-model'
 
@@ -25,6 +25,17 @@ interface TextRange {
 
 export const MARKER_CLASS = 'cm-live-marker'
 
+// @lezer/common is not a direct dependency, so the node type is derived.
+type SyntaxNode = ReturnType<typeof syntaxTree>['topNode']
+
+// Inline containers whose marker runs can sit flush against a nested element's.
+const INLINE_MARKS: Partial<Record<string, string>> = {
+  StrongEmphasis: 'EmphasisMark',
+  Emphasis: 'EmphasisMark',
+  Strikethrough: 'StrikethroughMark',
+  InlineCode: 'CodeMark',
+}
+
 /**
  * Maps the syntax tree over `ranges` to decoration specs. Kept separate from
  * the `Decoration` objects so the hiding rules can be tested against a plain
@@ -35,14 +46,33 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
   const active = activeLineNumbers(state)
   const specs: LiveSpec[] = []
 
-  // A marker is hidden only when its line has no cursor/selection. A range
-  // that spans lines cannot be replaced from a plugin, so it stays visible.
-  const marker = (from: number, to: number): void => {
+  // A marker is hidden unless `shown`. A range that spans lines cannot be
+  // replaced from a plugin, so it stays visible.
+  const marker = (from: number, to: number, shown: boolean): void => {
     if (from >= to) return
-    const first = doc.lineAt(from).number
-    const sameLine = first === doc.lineAt(to).number
-    if (sameLine && !active.has(first)) specs.push({ kind: 'hide', from, to })
+    const sameLine = doc.lineAt(from).number === doc.lineAt(to).number
+    if (sameLine && !shown) specs.push({ kind: 'hide', from, to })
     else specs.push({ kind: 'mark', from, to, className: MARKER_CLASS })
+  }
+
+  // An element's markers show while a selection touches it. The element is
+  // widened to enclosing inline elements it sits flush against, so a marker
+  // run such as the `***` of `***foo***` shows and hides as a unit.
+  const revealed = (node: SyntaxNode): boolean => {
+    let from = node.from
+    let to = node.to
+    for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
+      const markName = INLINE_MARKS[parent.name]
+      if (!markName) break
+      const marks = parent.getChildren(markName)
+      const open = marks[0]
+      const close = marks[marks.length - 1]
+      const flush = (open && child.from === open.to) || (close && child.to === close.from)
+      if (!flush) break
+      from = parent.from
+      to = parent.to
+    }
+    return touchesSelection(state, from, to)
   }
   const mark = (from: number, to: number, className: string): void => {
     if (from < to) specs.push({ kind: 'mark', from, to, className })
@@ -66,17 +96,18 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
           const open = marks[0]
           if (open) {
             const line = doc.lineAt(open.from)
+            const shown = active.has(line.number)
             const hasText = doc.sliceString(open.to, line.to).trim() !== ''
             if (hasText) {
               // Take the separating space along so the text does not shift right.
               const gap = doc.sliceString(open.to, open.to + 1) === ' ' ? 1 : 0
-              marker(open.from, open.to + gap)
+              marker(open.from, open.to + gap, shown)
               // `### title ###`: the closing sequence is a marker too.
               const close = marks.length > 1 ? marks[marks.length - 1] : undefined
               if (close) {
                 let start = close.from
                 while (start > open.to && doc.sliceString(start - 1, start) === ' ') start--
-                marker(start, close.to)
+                marker(start, close.to, shown)
               }
             } else {
               mark(open.from, open.to, MARKER_CLASS)
@@ -105,12 +136,14 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
             const cls = name === 'StrongEmphasis' ? 'cm-live-strong' : name === 'Emphasis' ? 'cm-live-em' : 'cm-live-strike'
             mark(ref.from, ref.to, cls)
             const markName = name === 'Strikethrough' ? 'StrikethroughMark' : 'EmphasisMark'
-            for (const child of ref.node.getChildren(markName)) marker(child.from, child.to)
+            const shown = revealed(ref.node)
+            for (const child of ref.node.getChildren(markName)) marker(child.from, child.to, shown)
             return true
           }
           case 'InlineCode': {
             mark(ref.from, ref.to, 'cm-live-code')
-            for (const child of ref.node.getChildren('CodeMark')) marker(child.from, child.to)
+            const shown = revealed(ref.node)
+            for (const child of ref.node.getChildren('CodeMark')) marker(child.from, child.to, shown)
             return true
           }
           case 'Link': {
@@ -127,15 +160,19 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
             const url = ref.node.getChild('URL')
             if (open && close && url) {
               link(open.to, close.from, doc.sliceString(url.from, url.to))
-              marker(open.from, open.to)
-              marker(close.from, ref.to)
+              // A card line reaching here holds the caret and shows its whole
+              // source, even with the caret before the link.
+              const shown = parseCardLine(line.text) !== null || revealed(ref.node)
+              marker(open.from, open.to, shown)
+              marker(close.from, ref.to, shown)
             }
             return false
           }
           case 'Autolink': {
             const url = ref.node.getChild('URL')
             link(ref.from, ref.to, url ? doc.sliceString(url.from, url.to) : '')
-            for (const child of ref.node.getChildren('LinkMark')) marker(child.from, child.to)
+            const shown = revealed(ref.node)
+            for (const child of ref.node.getChildren('LinkMark')) marker(child.from, child.to, shown)
             return false
           }
           case 'URL': {

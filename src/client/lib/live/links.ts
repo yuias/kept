@@ -40,7 +40,8 @@ export function linkHref(raw: string): string | null {
 /** What a primary click on a link at `pos` does: open in a new tab, or just place the caret. */
 export function linkClickAction(state: EditorState, pos: number): 'open' | 'caret' {
   if (state.readOnly) return 'open'
-  // Off the caret line the markup is hidden, so the link reads as a plain link.
+  // On the caret line the user is editing, so a click places the caret (which
+  // also reveals the link's markers); elsewhere a click opens the link.
   return activeLineNumbers(state).has(state.doc.lineAt(pos).number) ? 'caret' : 'open'
 }
 

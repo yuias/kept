@@ -1,8 +1,8 @@
 import { markdownLanguage } from '@codemirror/lang-markdown'
-import { LanguageSupport } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { LanguageSupport, syntaxTree } from '@codemirror/language'
+import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { activeLineNumbers } from './active-lines'
+import { activeLineNumbers, touchesSelection } from './active-lines'
 import { buildDecorations, collectSpecs, type LiveSpec } from './decorations'
 
 function specsFor(doc: string, cursor: number | [number, number] = doc.length): LiveSpec[] {
@@ -13,6 +13,14 @@ function specsFor(doc: string, cursor: number | [number, number] = doc.length): 
     extensions: [new LanguageSupport(markdownLanguage)],
   })
   return collectSpecs(state, [{ from: 0, to: doc.length }])
+}
+
+function stateFor(doc: string, cursor: number, readOnly = false): EditorState {
+  return EditorState.create({
+    doc,
+    selection: { anchor: cursor },
+    extensions: [new LanguageSupport(markdownLanguage), EditorState.readOnly.of(readOnly)],
+  })
 }
 
 const hidden = (specs: LiveSpec[], doc: string): string[] =>
@@ -30,6 +38,62 @@ describe('activeLineNumbers', () => {
   it('is empty in a read-only editor', () => {
     const state = EditorState.create({ doc: 'a\nb', extensions: EditorState.readOnly.of(true) })
     expect([...activeLineNumbers(state)]).toEqual([])
+  })
+})
+
+describe('touchesSelection', () => {
+  const doc = 'abcdef'
+
+  it('is true at both edges and inside', () => {
+    for (const cursor of [2, 3, 4]) expect(touchesSelection(stateFor(doc, cursor), 2, 4)).toBe(true)
+  })
+
+  it('is false one position outside', () => {
+    expect(touchesSelection(stateFor(doc, 1), 2, 4)).toBe(false)
+    expect(touchesSelection(stateFor(doc, 5), 2, 4)).toBe(false)
+  })
+
+  it('is true for a selection overlapping one character', () => {
+    const state = EditorState.create({ doc, selection: { anchor: 0, head: 3 } })
+    expect(touchesSelection(state, 2, 4)).toBe(true)
+  })
+
+  it('is false in a read-only editor', () => {
+    expect(touchesSelection(stateFor(doc, 3, true), 2, 4)).toBe(false)
+  })
+})
+
+describe('syntax tree shapes', () => {
+  const names = (doc: string, parent: string): string[] => {
+    const state = stateFor(doc, 0)
+    const out: string[] = []
+    syntaxTree(state).iterate({
+      enter: (ref) => {
+        if (ref.name === parent) for (let c = ref.node.firstChild; c; c = c.nextSibling) out.push(`${c.name} ${c.from}-${c.to}`)
+      },
+    })
+    return out
+  }
+
+  it('nests strong inside emphasis for triple markers', () => {
+    expect(names('***foo***', 'Emphasis')).toEqual([
+      'EmphasisMark 0-1',
+      'StrongEmphasis 1-8',
+      'EmphasisMark 8-9',
+    ])
+    expect(names('***foo***', 'StrongEmphasis')).toEqual(['EmphasisMark 1-3', 'EmphasisMark 6-8'])
+  })
+
+  it('orders link marks as open bracket, close bracket, open paren, close paren', () => {
+    const doc = '[a](u)'
+    const state = stateFor(doc, 0)
+    const marks: string[] = []
+    syntaxTree(state).iterate({
+      enter: (ref) => {
+        if (ref.name === 'LinkMark') marks.push(doc.slice(ref.from, ref.to))
+      },
+    })
+    expect(marks).toEqual(['[', ']', '(', ')'])
   })
 })
 
@@ -78,15 +142,103 @@ describe('inline styles', () => {
     expect(hidden(specs, doc)).toEqual(['**', '**', '*', '*', '~~', '~~', '`', '`'])
   })
 
-  it('shows every marker on the cursor line', () => {
+  it('shows the touched element and hides the others on the cursor line', () => {
     const doc = '**b** and *i*'
-    expect(hidden(specsFor(doc, 3), doc)).toEqual([])
+    expect(hidden(specsFor(doc, 3), doc)).toEqual(['*', '*'])
   })
 
-  it('treats any line inside a multi-line selection as active', () => {
+  it('reveals every element a multi-line selection overlaps', () => {
     const doc = '**a**\n**b**\n**c**'
     // Lines 1 and 2 are selected, so only the third line's markers hide.
     expect(hidden(specsFor(doc, [0, 7]), doc)).toEqual(['**', '**'])
+  })
+})
+
+describe('element-level reveal', () => {
+  const marked = (specs: LiveSpec[]): number => specs.filter((s) => s.kind === 'mark' && s.className === 'cm-live-marker').length
+
+  it('hides and shows markers by the element the cursor touches', () => {
+    const doc = 'foo **bar** baz'
+    expect(hidden(specsFor(doc, 0), doc)).toEqual(['**', '**'])
+    for (const cursor of [4, 6, 11]) {
+      const specs = specsFor(doc, cursor)
+      expect(hidden(specs, doc)).toEqual([])
+      expect(marked(specs)).toBe(2)
+    }
+    expect(hidden(specsFor(doc, 12), doc)).toEqual(['**', '**'])
+    expect(hidden(specsFor(doc, [0, 5]), doc)).toEqual([])
+  })
+
+  const sameLine: [string, string, string, number][] = [
+    ['emphasis', '*i* tail', '*', 0],
+    ['strikethrough', '~~s~~ tail', '~~', 0],
+    ['code', '`c` tail', '`', 0],
+    ['link', '[t](https://e.example) tail', '[', 0],
+    ['autolink', '<https://e.example> tail', '<', 0],
+  ]
+  it.each(sameLine)('hides an untouched %s while a touched one shows', (_name, element, firstMarker) => {
+    const doc = `${element} **b**`
+    const bold = doc.indexOf('**b**')
+    // Cursor inside the bold: the first element hides, the bold shows.
+    const away = hidden(specsFor(doc, bold + 2), doc)
+    expect(away).toContain(firstMarker)
+    expect(away).not.toContain('**')
+    // Cursor at the element's edge: it shows, the bold hides.
+    const edge = hidden(specsFor(doc, 0), doc)
+    expect(edge).not.toContain(firstMarker)
+    expect(edge).toEqual(['**', '**'])
+  })
+
+  it('leaves unclosed emphasis as literal text', () => {
+    const doc = '***foo'
+    for (let cursor = 0; cursor <= doc.length; cursor++) {
+      const specs = specsFor(doc, cursor)
+      expect(specs.some((s) => s.kind === 'hide')).toBe(false)
+      expect(classes(specs)).not.toContain('cm-live-strong')
+      expect(classes(specs)).not.toContain('cm-live-em')
+    }
+  })
+
+  it('shows and hides nested markers as a unit', () => {
+    const doc = '***foo***\n\nx'
+    expect(hidden(specsFor(doc, doc.length), doc).join('')).toBe('******')
+    for (const cursor of [0, 4, 9]) expect(hidden(specsFor(doc, cursor), doc)).toEqual([])
+  })
+
+  it('reveals a link by its edges, not by its line', () => {
+    const doc = '[t](https://e.example) tail'
+    expect(hidden(specsFor(doc, 2), doc)).toEqual([])
+    expect(hidden(specsFor(doc, doc.length), doc)).toEqual(['[', '](https://e.example)'])
+  })
+
+  it('keeps the heading marker line-based while inline markers are element-based', () => {
+    const doc = '# a **b**'
+    const specs = specsFor(doc, 0)
+    expect(hidden(specs, doc)).toEqual(['**', '**'])
+    expect(specs).toContainEqual({ kind: 'mark', from: 0, to: 2, className: 'cm-live-marker' })
+  })
+
+  it('shows a whole card line with the caret before it', () => {
+    const doc = '@[card](https://a.example)\n\ntail'
+    expect(hidden(specsFor(doc, 0), doc)).toEqual([])
+  })
+
+  it('reveals nothing in a read-only editor', () => {
+    const doc = '**b**'
+    const specs = collectSpecs(stateFor(doc, 2, true), [{ from: 0, to: doc.length }])
+    expect(hidden(specs, doc)).toEqual(['**', '**'])
+  })
+
+  it('reveals only the elements each cursor touches', () => {
+    const doc = '**a** **b** **c**'
+    const state = EditorState.create({
+      doc,
+      selection: EditorSelection.create([EditorSelection.cursor(2), EditorSelection.cursor(14)]),
+      extensions: [new LanguageSupport(markdownLanguage), EditorState.allowMultipleSelections.of(true)],
+    })
+    const specs = collectSpecs(state, [{ from: 0, to: doc.length }])
+    expect(hidden(specs, doc)).toEqual(['**', '**'])
+    expect(specs.filter((s) => s.kind === 'hide').map((s) => s.from)).toEqual([6, 9])
   })
 })
 
@@ -157,6 +309,24 @@ describe('robustness', () => {
     '<https://example.com> https://bare.example.com',
     '[a](b "title\nover lines")',
   ]
+
+  const cursorDocs = [
+    ...tricky,
+    'foo **bar** baz',
+    '***foo***',
+    '[t](https://e.example) x',
+    '# t #\n\n*e* <https://e.example>',
+    'a `c` ~~s~~ b',
+  ]
+
+  it.each(cursorDocs)('never leaves a cursor on or inside a hidden range of %j', (doc) => {
+    for (let cursor = 0; cursor <= doc.length; cursor++) {
+      for (const spec of collectSpecs(stateFor(doc, cursor), [{ from: 0, to: doc.length }])) {
+        if (spec.kind !== 'hide') continue
+        expect(spec.from <= cursor && cursor <= spec.to).toBe(false)
+      }
+    }
+  })
 
   it.each(tricky)('builds decorations without throwing for %j', (doc) => {
     for (const cursor of [0, doc.length]) {

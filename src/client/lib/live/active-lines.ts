@@ -15,3 +15,13 @@ export function activeLineNumbers(state: EditorState): Set<number> {
   }
   return lines
 }
+
+/**
+ * True when a selection range touches or overlaps [from, to], edges included,
+ * so a cursor directly before or after an element still reveals its markers.
+ * Always false in a read-only editor, for the same reason as activeLineNumbers.
+ */
+export function touchesSelection(state: EditorState, from: number, to: number): boolean {
+  if (state.readOnly) return false
+  return state.selection.ranges.some((range) => range.from <= to && range.to >= from)
+}
