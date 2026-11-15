@@ -15,6 +15,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { runnerImport } from 'vite'
+import { collapseBlockGaps } from './notion-markdown.ts'
 
 const { values: args } = parseArgs({
   options: {
@@ -288,7 +289,7 @@ function rewriteBody(page: Page): string {
   const status = page.props.get('Status')
   if (url) lead.push(url)
   if (status) lead.push(`Status: ${status}`)
-  return [...lead, body].filter((s) => s !== '').join('\n\n')
+  return collapseBlockGaps([...lead, body].filter((s) => s !== '').join('\n\n'))
 }
 
 // Collect the tree.

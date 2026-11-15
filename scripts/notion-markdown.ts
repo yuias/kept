@@ -1,0 +1,107 @@
+// Markdown rewrites for the Notion importer. Every "how will kept read this"
+// decision uses the parser the live editor uses, so the rewrites cannot change
+// what a note renders as. This file runs under plain Node type stripping
+// (erasable syntax only) and must not import @lezer/*, which is not a direct
+// dependency.
+
+import { markdownLanguage } from '@codemirror/lang-markdown'
+
+type Tree = ReturnType<typeof markdownLanguage.parser.parse>
+type SyntaxNode = Tree['topNode']
+
+/** A top-level block: lezer node name and its 0-based first and last line. */
+export interface Block {
+  name: string
+  firstLine: number
+  lastLine: number
+}
+
+function lineStarts(md: string): number[] {
+  const starts = [0]
+  for (let i = md.indexOf('\n'); i !== -1; i = md.indexOf('\n', i + 1)) starts.push(i + 1)
+  return starts
+}
+
+/** Index of the last line start that is <= offset. */
+function lineAt(starts: number[], offset: number): number {
+  let lo = 0
+  let hi = starts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (starts[mid] <= offset) lo = mid
+    else hi = mid - 1
+  }
+  return lo
+}
+
+/** Top-level nodes of `md` as parsed by the live editor's parser. */
+export function topLevelBlocks(md: string): Block[] {
+  const starts = lineStarts(md)
+  const blocks: Block[] = []
+  for (let node: SyntaxNode | null = markdownLanguage.parser.parse(md).topNode.firstChild; node; node = node.nextSibling) {
+    // A node that ends right after a line break does not own the next line.
+    const end = node.to > node.from && md[node.to - 1] === '\n' ? node.to - 1 : node.to
+    blocks.push({ name: node.name, firstLine: lineAt(starts, node.from), lastLine: lineAt(starts, end) })
+  }
+  return blocks
+}
+
+/** `topLevelBlocks` names with runs of adjacent 'Paragraph' merged into one entry. */
+export function blockSignature(md: string): string[] {
+  const names: string[] = []
+  for (const { name } of topLevelBlocks(md)) {
+    if (name === 'Paragraph' && names[names.length - 1] === 'Paragraph') continue
+    names.push(name)
+  }
+  return names
+}
+
+/** A1: drops the single blank line between top-level blocks wherever the parse stays the same. */
+export function collapseBlockGaps(md: string): string {
+  const blocks = topLevelBlocks(md)
+  if (blocks.length < 2) return md
+
+  const lines = md.split('\n')
+  const drop = new Set<number>()
+  const textOf = (block: Block): string => lines.slice(block.firstLine, block.lastLine + 1).join('\n')
+
+  // Each join is tested against the last top-level node of the output so far,
+  // because only that node can still be open when the next block starts.
+  let tail = textOf(blocks[0])
+  let tailName = blocks[0].name
+  for (let i = 1; i < blocks.length; i++) {
+    const a = blocks[i - 1]
+    const b = blocks[i]
+    const bText = textOf(b)
+    const oneBlankLine = b.firstLine - a.lastLine === 2 && /^[ \t]*$/.test(lines[a.lastLine + 1])
+    if (!oneBlankLine) {
+      tail = bText
+      tailName = b.name
+      continue
+    }
+
+    const tailLines = tail.split('\n').length
+    const joined = topLevelBlocks(tail + '\n' + bText)
+    const separate =
+      joined.length === 2 &&
+      joined[0].name === tailName &&
+      joined[0].firstLine === 0 &&
+      joined[1].name === b.name &&
+      joined[1].firstLine === tailLines
+    // The editor shows source lines 1:1, so a paragraph followed by a paragraph
+    // reads the same without the blank line.
+    const merged = tailName === 'Paragraph' && b.name === 'Paragraph' && joined.length === 1 && joined[0].name === 'Paragraph'
+    if (separate) {
+      drop.add(a.lastLine + 1)
+      tail = bText
+      tailName = b.name
+    } else if (merged) {
+      drop.add(a.lastLine + 1)
+      tail += '\n' + bText
+    } else {
+      tail = bText
+      tailName = b.name
+    }
+  }
+  return lines.filter((_, index) => !drop.has(index)).join('\n')
+}
