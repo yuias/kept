@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addEmptyHeaders, blockSignature, collapseBlockGaps, countRowPipes, joinBrokenTableRows, topLevelBlocks } from '../../scripts/notion-markdown'
+import { addEmptyHeaders, blockSignature, collapseBlockGaps, countRowPipes, csvTable, joinBrokenTableRows, parseCsv, topLevelBlocks } from '../../scripts/notion-markdown'
 
 const TABLE = '| x | y |\n| --- | --- |\n| 1 | 2 |'
 const FENCE = '```\ncode\n```'
@@ -222,5 +222,41 @@ describe('addEmptyHeaders', () => {
   it('produces a top-level table', () => {
     expect(topLevelBlocks(addEmptyHeaders(`intro\n${TABLE}`)).map((block) => block.name)).toEqual(['Paragraph', 'Table'])
     expect(topLevelBlocks(addEmptyHeaders(TABLE)).map((block) => block.name)).toEqual(['Table'])
+  })
+})
+
+describe('csvTable', () => {
+  it('keeps the column names as a real header row', () => {
+    expect(csvTable('Name,Qty\nfoo,x\nbar,y\n')).toBe('| Name | Qty |\n| --- | --- |\n| foo | x |\n| bar | y |')
+  })
+
+  it('turns line breaks inside quoted cells into <br>', () => {
+    expect(csvTable('A,B\n"a\nb",c')).toBe('| A | B |\n| --- | --- |\n| a<br>b | c |')
+    expect(csvTable('A,B\r\n"a\r\n  b",c\r\n')).toBe('| A | B |\n| --- | --- |\n| a<br>b | c |')
+  })
+
+  it('escapes pipes in cells', () => {
+    expect(csvTable('A\n"x|y"')).toBe('| A |\n| --- |\n| x\\|y |')
+  })
+
+  it('drops the @ before a date mention', () => {
+    expect(csvTable('When\n@01/02/2024\n@word')).toBe('| When |\n| --- |\n| 01/02/2024 |\n| @word |')
+  })
+
+  it('adds a totals row for an all-numeric column', () => {
+    expect(csvTable('Item,Cost\na,1\nb,"2,000"\nc,3.5')).toBe(
+      '| Item | Cost |\n| --- | --- |\n| a | 1 |\n| b | 2,000 |\n| c | 3.5 |\n| 合計 | 2004.5 |',
+    )
+  })
+
+  it('returns an empty string for an empty CSV', () => {
+    expect(csvTable('')).toBe('')
+    expect(csvTable('\n\n')).toBe('')
+  })
+})
+
+describe('parseCsv', () => {
+  it('strips a BOM and unescapes doubled quotes', () => {
+    expect(parseCsv('\uFEFFa,"b ""q"""\n')).toEqual([['a', 'b "q"']])
   })
 })

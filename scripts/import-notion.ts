@@ -15,7 +15,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { runnerImport } from 'vite'
-import { addEmptyHeaders, collapseBlockGaps, joinBrokenTableRows } from './notion-markdown.ts'
+import { addEmptyHeaders, collapseBlockGaps, csvTable, joinBrokenTableRows } from './notion-markdown.ts'
 
 const { values: args } = parseArgs({
   options: {
@@ -160,69 +160,6 @@ function pageDates(page: Page): { created: number; updated: number } | null {
   return { created: created ?? updated!, updated: updated ?? created! }
 }
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let quoted = false
-  const src = text.replace(/^﻿/, '')
-
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i]!
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') {
-        field += '"'
-        i++
-      } else if (ch === '"') quoted = false
-      else field += ch
-    } else if (ch === '"') quoted = true
-    else if (ch === ',') {
-      row.push(field)
-      field = ''
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && src[i + 1] === '\n') i++
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ''
-    } else field += ch
-  }
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-  return rows
-}
-
-const NUMBER = /^-?\d[\d,]*(\.\d+)?$/
-
-function csvToTable(file: string): string {
-  const [header, ...rows] = parseCsv(readFileSync(file, 'utf8')).filter((r) => r.some((c) => c.trim() !== ''))
-  if (!header) return ''
-  // `@` prefixes a date that was entered as a mention.
-  const cell = (s: string) => s.trim().replace(/^@(?=\d)/, '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ')
-
-  const lines = [
-    `| ${header.map(cell).join(' | ')} |`,
-    `| ${header.map(() => '---').join(' | ')} |`,
-    ...rows.map((r) => `| ${header.map((_, c) => cell(r[c] ?? '')).join(' | ')} |`),
-  ]
-
-  // Notion's view footers (sums) are not exported, so a column whose values
-  // are all numbers gets its total recomputed as a final row.
-  const totals = header.map((_, c) => {
-    const values = rows.map((r) => (r[c] ?? '').trim()).filter((v) => v !== '')
-    if (values.length === 0 || !values.every((v) => NUMBER.test(v))) return null
-    return values.reduce((sum, v) => sum + Number(v.replace(/,/g, '')), 0)
-  })
-  if (rows.length > 1 && totals.some((t) => t !== null)) {
-    const labelled = totals.map((t) => (t === null ? '' : String(t)))
-    if (totals[0] === null) labelled[0] = '合計'
-    lines.push(`| ${labelled.join(' | ')} |`)
-  }
-  return lines.join('\n')
-}
-
 interface ImageOut {
   id: string
   file: string
@@ -272,7 +209,7 @@ function rewriteBody(page: Page): string {
   body = body.replace(/(?<=^|\n\n)\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)[ \t]*(?=\n\n|$)/g, (_, url: string) => linkCard.cardMarkup(url))
 
   // An inline database is a lone link line to its CSV.
-  body = body.replace(/^\[[^\]]*\]\(([^)]*_all\.csv)\)$/gm, (_, href: string) => csvToTable(join(dir, decodeURIComponent(href))))
+  body = body.replace(/^\[[^\]]*\]\(([^)]*_all\.csv)\)$/gm, (_, href: string) => csvTable(readFileSync(join(dir, decodeURIComponent(href)), 'utf8')))
 
   body = body.replace(/!\[([^\]]*)\]\(([^)]*attachments\/[^)]+)\)/g, (_, alt: string, href: string) => {
     const source = join(dir, decodeURIComponent(href))

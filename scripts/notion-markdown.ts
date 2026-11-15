@@ -191,3 +191,68 @@ export function collapseBlockGaps(md: string): string {
   }
   return lines.filter((_, index) => !drop.has(index)).join('\n')
 }
+
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  const src = text.replace(/^﻿/, '')
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]!
+    if (quoted) {
+      if (ch === '"' && src[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (ch === '"') quoted = false
+      else field += ch
+    } else if (ch === '"') quoted = true
+    else if (ch === ',') {
+      row.push(field)
+      field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+    } else field += ch
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+}
+
+const NUMBER = /^-?\d[\d,]*(\.\d+)?$/
+
+/** A database CSV as a Markdown table whose header row is the CSV's column names. */
+export function csvTable(csvText: string): string {
+  const [header, ...rows] = parseCsv(csvText).filter((r) => r.some((c) => c.trim() !== ''))
+  if (!header) return ''
+  // `@` prefixes a date that was entered as a mention. A line break inside a cell
+  // becomes `<br>`, because a raw newline would end the table row.
+  const cell = (s: string) => s.trim().replace(/^@(?=\d)/, '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, '<br>')
+
+  const lines = [
+    `| ${header.map(cell).join(' | ')} |`,
+    `| ${header.map(() => '---').join(' | ')} |`,
+    ...rows.map((r) => `| ${header.map((_, c) => cell(r[c] ?? '')).join(' | ')} |`),
+  ]
+
+  // Notion's view footers (sums) are not exported, so a column whose values
+  // are all numbers gets its total recomputed as a final row.
+  const totals = header.map((_, c) => {
+    const values = rows.map((r) => (r[c] ?? '').trim()).filter((v) => v !== '')
+    if (values.length === 0 || !values.every((v) => NUMBER.test(v))) return null
+    return values.reduce((sum, v) => sum + Number(v.replace(/,/g, '')), 0)
+  })
+  if (rows.length > 1 && totals.some((t) => t !== null)) {
+    const labelled = totals.map((t) => (t === null ? '' : String(t)))
+    if (totals[0] === null) labelled[0] = '合計'
+    lines.push(`| ${labelled.join(' | ')} |`)
+  }
+  return lines.join('\n')
+}
