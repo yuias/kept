@@ -142,6 +142,21 @@ export function addEmptyHeaders(md: string): string {
   return lines.join('\n')
 }
 
+/**
+ * Rewrites every top-level paragraph that is a single link line, which is how
+ * the export writes a bookmark block. Being a top-level paragraph keeps list
+ * items and fenced code out.
+ */
+export function bookmarksToCards(md: string, toCard: (url: string) => string): string {
+  const lines = md.split('\n')
+  for (const block of topLevelBlocks(md)) {
+    if (block.name !== 'Paragraph' || block.firstLine !== block.lastLine) continue
+    const url = /^\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)[ \t]*$/.exec(lines[block.firstLine])?.[1]
+    if (url !== undefined) lines[block.firstLine] = toCard(url)
+  }
+  return lines.join('\n')
+}
+
 /** A1: drops the single blank line between top-level blocks wherever the parse stays the same. */
 export function collapseBlockGaps(md: string): string {
   const blocks = topLevelBlocks(md)

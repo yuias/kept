@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addEmptyHeaders, blockSignature, collapseBlockGaps, countRowPipes, csvTable, joinBrokenTableRows, parseCsv, topLevelBlocks } from '../../scripts/notion-markdown'
+import { addEmptyHeaders, blockSignature, bookmarksToCards, collapseBlockGaps, countRowPipes, csvTable, joinBrokenTableRows, parseCsv, topLevelBlocks } from '../../scripts/notion-markdown'
 
 const TABLE = '| x | y |\n| --- | --- |\n| 1 | 2 |'
 const FENCE = '```\ncode\n```'
@@ -32,6 +32,23 @@ describe('blockSignature', () => {
   it('merges runs of adjacent paragraphs', () => {
     expect(blockSignature('a\n\nb\n\n---')).toEqual(['Paragraph', 'HorizontalRule'])
     expect(blockSignature('a\n\nb')).toEqual(['Paragraph'])
+  })
+})
+
+describe('bookmarksToCards', () => {
+  const card = (url: string) => `@[card](${url})`
+
+  it('turns a link alone in a paragraph into a card', () => {
+    expect(bookmarksToCards('intro\n\n[Site](https://a.example)\n\nend', card)).toBe('intro\n\n@[card](https://a.example)\n\nend')
+  })
+
+  it('leaves links in fenced code, list items and longer paragraphs alone', () => {
+    const md = '```\n\n[Site](https://a.example)\n\n```\n\n- [Site](https://b.example)\n\n[Site](https://c.example)\nmore text'
+    expect(bookmarksToCards(md, card)).toBe(md)
+  })
+
+  it('leaves non-http links alone', () => {
+    expect(bookmarksToCards('[Page](Page%20abc.md)', card)).toBe('[Page](Page%20abc.md)')
   })
 })
 

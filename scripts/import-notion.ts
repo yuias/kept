@@ -20,7 +20,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { runnerImport } from 'vite'
-import { addEmptyHeaders, collapseBlockGaps, csvTable, joinBrokenTableRows } from './notion-markdown.ts'
+import { addEmptyHeaders, bookmarksToCards, collapseBlockGaps, csvTable, joinBrokenTableRows } from './notion-markdown.ts'
 
 const { values: args } = parseArgs({
   options: {
@@ -211,7 +211,7 @@ function rewriteBody(page: Page): string {
   // same as a link typed on its own line, so every such paragraph becomes a
   // card. List items stay links: older Notion could not put bookmarks in lists.
   // This runs before page links are made absolute so those stay links.
-  body = body.replace(/(?<=^|\n\n)\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)[ \t]*(?=\n\n|$)/g, (_, url: string) => linkCard.cardMarkup(url))
+  body = bookmarksToCards(body, linkCard.cardMarkup)
 
   // An inline database is a lone link line to its CSV.
   body = body.replace(/^\[[^\]]*\]\(([^)]*_all\.csv)\)$/gm, (_, href: string) => csvTable(readFileSync(join(dir, decodeURIComponent(href)), 'utf8')))
