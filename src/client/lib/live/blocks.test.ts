@@ -278,10 +278,21 @@ describe('quotes and code', () => {
     expect(hides.sort((x, y) => x - y)).toEqual([0, 13])
   })
 
+  it('indents nested items by depth, whatever the parent mark', () => {
+    const indents = (doc: string) => specsFor(doc, 0).filter((s) => s.kind === 'indent')
+    expect(indents('1. a\n    - b\n        - c')).toEqual([
+      { kind: 'indent', from: 5, to: 9, depth: 2 },
+      { kind: 'indent', from: 13, to: 21, depth: 3 },
+    ])
+    expect(indents('- a\n  - b')).toEqual([{ kind: 'indent', from: 4, to: 6, depth: 2 }])
+    expect(indents('> - a\n>   - b')).toEqual([])
+  })
+
   it('does not style a line after a trailing newline', () => {
     const cases: [string, number][] = [
       ['> a\n> b\n', 2],
-      ['- a\n- b\n', 0],
+      // The second item's spacing class sits on its own line, inside the doc.
+      ['- a\n- b\n', 1],
       ['```\nx\n```\n', 3],
       ['    code\n', 1],
     ]

@@ -26,6 +26,8 @@ export type BlockSpec =
   | { kind: 'rule'; from: number; to: number }
   // Replaces a `-` / `*` / `+` list mark with a bullet glyph.
   | { kind: 'bullet'; from: number; to: number }
+  // The leading whitespace of a nested list item, drawn `depth - 1` steps wide.
+  | { kind: 'indent'; from: number; to: number; depth: number }
   // Replaces the markdown source (always within one line) with the image.
   | { kind: 'image'; from: number; to: number; src: string; alt: string }
 
@@ -155,6 +157,20 @@ export function collectBlockSpecs(state: EditorState, ranges: readonly TextRange
             const mark = ref.node.getChild('ListMark')
             const taskMarker = ref.node.getChild('Task')?.getChild('TaskMarker')
             if (!mark) return true
+            // The source indent is a few proportional spaces, narrower than the
+            // parent's mark and gap and different under `1.` than under `-`;
+            // a fixed step per level lines nested items up the same way.
+            let depth = 0
+            let quoted = false
+            for (let p: typeof ref.node | null = ref.node; p; p = p.parent) {
+              if (p.name === 'ListItem') depth++
+              if (p.name === 'Blockquote') quoted = true
+            }
+            const markLine = doc.lineAt(mark.from)
+            if (depth > 1 && !quoted && mark.from > markLine.from && !doc.sliceString(markLine.from, mark.from).trim()) {
+              emit({ kind: 'indent', from: markLine.from, to: mark.from, depth })
+            }
+            if (ref.node.prevSibling?.name === 'ListItem') emit({ kind: 'line', from: markLine.from, className: 'cm-live-list-next' })
             // A checkbox stands in for the bullet, so the bullet goes when it shows.
             if (
               taskMarker &&
@@ -383,6 +399,10 @@ const ruleDecoration = Decoration.replace({ widget: new RuleWidget() })
 const bulletDecoration = Decoration.replace({ widget: new BulletWidget() })
 const markCache = new Map<string, Decoration>()
 const lineCache = new Map<string, Decoration>()
+const indentCache = new Map<string, Decoration>()
+
+/** Horizontal distance between list levels: the mark box plus the gap after it. */
+const LIST_STEP_EM = 2
 
 function cached(cache: Map<string, Decoration>, className: string, make: () => Decoration): Decoration {
   let deco = cache.get(className)
@@ -407,6 +427,13 @@ export function buildBlockDecorations(state: EditorState, ranges: readonly TextR
         return ruleDecoration.range(spec.from, spec.to)
       case 'bullet':
         return bulletDecoration.range(spec.from, spec.to)
+      case 'indent':
+        return cached(indentCache, String(spec.depth), () =>
+          Decoration.mark({
+            class: 'cm-live-list-indent',
+            attributes: { style: `min-width: ${(spec.depth - 1) * LIST_STEP_EM}em` },
+          }),
+        ).range(spec.from, spec.to)
       case 'checkbox':
         return Decoration.replace({ widget: new CheckboxWidget(spec.checked, tasksDisabled(state), label) }).range(
           spec.from,
@@ -486,16 +513,27 @@ export const blocksTheme = EditorView.theme({
     borderBottomRightRadius: '6px',
     paddingBottom: '16px',
   },
-  // Both marks get the same min width (wider than `•` and the bold `-`) and
-  // margin, so the text stays put when the caret swaps one for the other.
+  // Both marks get the same box, wide enough for `1.`, right-aligned so the
+  // text starts at the same place after a bullet or a number and stays put
+  // when the caret swaps one for the other. Box plus margin is LIST_STEP_EM.
   '.cm-live-list-mark': {
     color: 'var(--accent)',
     fontWeight: '600',
     display: 'inline-block',
-    minWidth: '0.5em',
+    minWidth: '1.25em',
+    textAlign: 'right',
     marginRight: '0.75em',
   },
-  '.cm-live-bullet': { color: 'var(--accent)', display: 'inline-block', minWidth: '0.5em', marginRight: '0.75em' },
+  '.cm-live-bullet': {
+    color: 'var(--accent)',
+    display: 'inline-block',
+    minWidth: '1.25em',
+    textAlign: 'right',
+    marginRight: '0.75em',
+  },
+  '.cm-live-list-indent': { display: 'inline-block' },
+  // GitHub's 0.25em between list items, as padding for CodeMirror's line measuring.
+  '.cm-line.cm-live-list-next': { paddingTop: '0.25em' },
   '.cm-live-checkbox': {
     margin: '0 0.45em 0 0',
     verticalAlign: 'middle',
