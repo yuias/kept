@@ -191,28 +191,41 @@ export async function reorderFolders(db: D1Database, owner: string, input: Reord
 
 export type DeleteFolderResult = 'deleted' | 'not_found'
 
+/**
+ * Deletes the folder and all its subfolders; the notes in them go to the trash
+ * and lose their folder. Only `trashed_at` changes on a note (as with
+ * `trashNote`), notes already in the trash keep their original `trashed_at`,
+ * and archived or locked notes are trashed like any other.
+ */
 export async function deleteFolder(db: D1Database, owner: string, id: string): Promise<DeleteFolderResult> {
-  // Only checked for existence (404); its parent_id is never read here, so a
-  // move landing between this check and the batch below cannot make the
-  // reparenting below use a stale parent. Each statement in the batch looks
-  // up the live parent_id itself, inside the same transaction.
+  // Only an existence check (404). The subtree is not read here: both
+  // statements below walk the live rows themselves, inside the batch's
+  // transaction, so a move landing after this check cannot leave them stale.
   const exists = await db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner = ?').bind(id, owner).first()
   if (!exists) return 'not_found'
 
-  const parentIdSubquery = 'SELECT parent_id FROM folders WHERE id = ? AND owner = ?'
+  // UNION (not UNION ALL) ends the recursion even if a cycle somehow existed.
+  const subtree = `WITH RECURSIVE subtree(id) AS (
+    SELECT id FROM folders WHERE id = ? AND owner = ?
+    UNION
+    SELECT f.id FROM folders f JOIN subtree s ON f.parent_id = s.id WHERE f.owner = ?
+  )`
 
-  // Reparenting happens before the delete, in the same batch, so a foreign
-  // key violation rolls the whole thing back instead of losing child folders
-  // or notes that were left pointing at a row that no longer exists. The
-  // DELETE runs last so the subquery above still sees the row.
+  // Notes are trashed first. The single DELETE then removes the whole subtree,
+  // and `notes.folder_id ON DELETE SET NULL` clears the folder of its notes.
+  // `parent_id` has no ON DELETE action, but the foreign key is checked at the
+  // end of the statement, when the children are gone too. A violation rolls
+  // back the whole batch.
   await db.batch([
     db
-      .prepare(`UPDATE folders SET parent_id = (${parentIdSubquery}) WHERE parent_id = ? AND owner = ?`)
-      .bind(id, owner, id, owner),
+      .prepare(
+        `${subtree} UPDATE notes SET trashed_at = ?
+         WHERE owner = ? AND trashed_at IS NULL AND folder_id IN (SELECT id FROM subtree)`,
+      )
+      .bind(id, owner, owner, Date.now(), owner),
     db
-      .prepare(`UPDATE notes SET folder_id = (${parentIdSubquery}) WHERE folder_id = ? AND owner = ?`)
-      .bind(id, owner, id, owner),
-    db.prepare('DELETE FROM folders WHERE id = ? AND owner = ?').bind(id, owner),
+      .prepare(`${subtree} DELETE FROM folders WHERE owner = ? AND id IN (SELECT id FROM subtree)`)
+      .bind(id, owner, owner, owner),
   ])
 
   return 'deleted'

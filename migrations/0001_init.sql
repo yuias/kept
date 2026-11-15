@@ -4,7 +4,7 @@
 
 CREATE TABLE folders (
   id TEXT PRIMARY KEY, owner TEXT NOT NULL,
-  parent_id TEXT REFERENCES folders(id),          -- reparented in code before delete
+  parent_id TEXT REFERENCES folders(id),          -- subtree deleted in code (deleteFolder)
   name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );

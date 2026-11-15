@@ -51,6 +51,14 @@ async function insertFolder(
   return id
 }
 
+function patchNote(env: Parameters<typeof call>[0], id: string, body: Record<string, unknown>): Promise<Response> {
+  return call(env, `/api/notes/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 async function createNote(env: Parameters<typeof call>[0], body: Record<string, unknown> = {}): Promise<Note> {
   const response = await call(env, '/api/notes', {
     method: 'POST',
@@ -143,42 +151,88 @@ describe('PATCH /api/folders/:id', () => {
 })
 
 describe('DELETE /api/folders/:id', () => {
-  it('moves child folders and notes of a deleted middle folder up to its parent', async () => {
+  it('deletes the subtree and trashes its notes, leaving everything else alone', async () => {
     const env = createTestEnv()
     const root = await createFolderOk(env, 'root')
     const middle = await createFolderOk(env, 'middle', root.id)
     const leaf = await createFolderOk(env, 'leaf', middle.id)
-    const note = await createNote(env, { title: 'x', folderId: middle.id })
+    const sibling = await createFolderOk(env, 'sibling', root.id)
+
+    const inMiddle = await createNote(env, { title: 'middle', folderId: middle.id })
+    const archived = await createNote(env, { title: 'archived', folderId: leaf.id })
+    expect((await patchNote(env, archived.id, { archived: true })).status).toBe(200)
+    const locked = await createNote(env, { title: 'locked', folderId: leaf.id })
+    expect((await patchNote(env, locked.id, { locked: true })).status).toBe(200)
+    const alreadyTrashed = await createNote(env, { title: 'old trash', folderId: leaf.id })
+    expect((await call(env, `/api/notes/${alreadyTrashed.id}/trash`, { method: 'POST' })).status).toBe(200)
+    await env.DB.prepare('UPDATE notes SET trashed_at = 1000 WHERE id = ?').bind(alreadyTrashed.id).run()
+    const inRoot = await createNote(env, { title: 'root', folderId: root.id })
+    const inSibling = await createNote(env, { title: 'sibling', folderId: sibling.id })
+
+    const otherRoot = await insertFolder(env, OTHER_OWNER)
+    const otherChild = await insertFolder(env, OTHER_OWNER, otherRoot)
+    const otherNoteId = generateId()
+    await env.DB.prepare(
+      `INSERT INTO notes (id, owner, folder_id, title, body, body_plain, created_at, updated_at)
+       VALUES (?, ?, ?, 'other', '', '', 1, 1)`,
+    )
+      .bind(otherNoteId, OTHER_OWNER, otherChild)
+      .run()
+
+    const getNote = async (id: string): Promise<Note> => (await (await call(env, `/api/notes/${id}`)).json()) as Note
+    const before = new Map(
+      await Promise.all([inMiddle, archived, locked].map(async (n) => [n.id, (await getNote(n.id)).updatedAt] as const)),
+    )
 
     const response = await deleteFolder(env, middle.id)
     expect(response.status).toBe(204)
 
-    const leafResponse = await call(env, '/api/folders')
-    const folders = (await leafResponse.json()) as Folder[]
-    expect(folders.map((f) => f.id)).not.toContain(middle.id)
-    const movedLeaf = folders.find((f) => f.id === leaf.id)
-    expect(movedLeaf?.parentId).toBe(root.id)
+    const folders = (await (await call(env, '/api/folders')).json()) as Folder[]
+    expect(folders.map((f) => f.id).sort()).toEqual([root.id, sibling.id].sort())
 
-    const noteResponse = await call(env, `/api/notes/${note.id}`)
-    const movedNote = (await noteResponse.json()) as Note
-    expect(movedNote.folderId).toBe(root.id)
+    for (const note of [inMiddle, archived, locked]) {
+      const after = await getNote(note.id)
+      expect(after.trashedAt).not.toBeNull()
+      expect(after.folderId).toBeNull()
+      expect(after.updatedAt).toBe(before.get(note.id))
+    }
+    const oldTrash = await getNote(alreadyTrashed.id)
+    expect(oldTrash.trashedAt).toBe(1000)
+    expect(oldTrash.folderId).toBeNull()
+
+    const rootNote = await getNote(inRoot.id)
+    expect(rootNote.trashedAt).toBeNull()
+    expect(rootNote.folderId).toBe(root.id)
+    const siblingNote = await getNote(inSibling.id)
+    expect(siblingNote.trashedAt).toBeNull()
+    expect(siblingNote.folderId).toBe(sibling.id)
+
+    const otherFolders = await env.DB.prepare('SELECT id FROM folders WHERE owner = ?').bind(OTHER_OWNER).all()
+    expect(otherFolders.results.map((r) => r.id).sort()).toEqual([otherRoot, otherChild].sort())
+    const otherNote = await env.DB.prepare('SELECT folder_id, trashed_at FROM notes WHERE id = ?')
+      .bind(otherNoteId)
+      .first<{ folder_id: string | null; trashed_at: number | null }>()
+    expect(otherNote).toEqual({ folder_id: otherChild, trashed_at: null })
+
+    const trash = (await (await call(env, '/api/notes?view=trash')).json()) as NoteListResponse
+    expect(trash.items.map((n) => n.id).sort()).toEqual([inMiddle.id, archived.id, locked.id, alreadyTrashed.id].sort())
   })
 
-  it('moves children and notes to root (null) when deleting a root-level folder', async () => {
+  it('deletes a root-level folder with its child and trashes their notes', async () => {
     const env = createTestEnv()
     const root = await createFolderOk(env, 'root')
     const child = await createFolderOk(env, 'child', root.id)
-    const note = await createNote(env, { title: 'x', folderId: root.id })
+    const note = await createNote(env, { title: 'x', folderId: child.id })
 
     const response = await deleteFolder(env, root.id)
     expect(response.status).toBe(204)
 
     const folders = (await (await call(env, '/api/folders')).json()) as Folder[]
-    const movedChild = folders.find((f) => f.id === child.id)
-    expect(movedChild?.parentId).toBeNull()
+    expect(folders).toEqual([])
 
-    const movedNote = (await (await call(env, `/api/notes/${note.id}`)).json()) as Note
-    expect(movedNote.folderId).toBeNull()
+    const trashed = (await (await call(env, `/api/notes/${note.id}`)).json()) as Note
+    expect(trashed.folderId).toBeNull()
+    expect(trashed.trashedAt).not.toBeNull()
   })
 
   it('reports a folder owned by another user as 404', async () => {
