@@ -485,8 +485,16 @@ export const blocksTheme = EditorView.theme({
     borderBottomRightRadius: '6px',
     paddingBottom: '4px',
   },
-  '.cm-live-list-mark': { color: 'var(--accent)', fontWeight: '600' },
-  '.cm-live-bullet': { color: 'var(--accent)' },
+  // Both marks get the same min width (wider than `•` and the bold `-`) and
+  // margin, so the text stays put when the caret swaps one for the other.
+  '.cm-live-list-mark': {
+    color: 'var(--accent)',
+    fontWeight: '600',
+    display: 'inline-block',
+    minWidth: '0.5em',
+    marginRight: '0.75em',
+  },
+  '.cm-live-bullet': { color: 'var(--accent)', display: 'inline-block', minWidth: '0.5em', marginRight: '0.75em' },
   '.cm-live-checkbox': {
     margin: '0 0.45em 0 0',
     verticalAlign: 'middle',
