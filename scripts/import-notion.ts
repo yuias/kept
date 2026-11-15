@@ -44,6 +44,10 @@ const { module: limits } = await runnerImport<typeof import('../src/shared/limit
   resolve(import.meta.dirname, '../src/shared/limits.ts'),
   { configFile: false, logLevel: 'silent' },
 )
+const { module: linkCard } = await runnerImport<typeof import('../src/shared/link-card.ts')>(
+  resolve(import.meta.dirname, '../src/shared/link-card.ts'),
+  { configFile: false, logLevel: 'silent' },
+)
 
 const NOTION_ID = /([0-9a-f]{32})(?=(?:_all)?\.(?:md|csv)$)/
 const IMPORT_NOW = Date.now()
@@ -255,6 +259,12 @@ const notesByNotionId = new Map<string, { id: string; title: string }>()
 function rewriteBody(page: Page): string {
   const dir = dirname(page.file)
   let body = page.body
+
+  // The export writes a bookmark block as a paragraph holding only a link, the
+  // same as a link typed on its own line, so every such paragraph becomes a
+  // card. List items stay links: older Notion could not put bookmarks in lists.
+  // This runs before page links are made absolute so those stay links.
+  body = body.replace(/(?<=^|\n\n)\[[^\]\n]*\]\((https?:\/\/[^)\s]+)\)[ \t]*(?=\n\n|$)/g, (_, url: string) => linkCard.cardMarkup(url))
 
   // An inline database is a lone link line to its CSV.
   body = body.replace(/^\[[^\]]*\]\(([^)]*_all\.csv)\)$/gm, (_, href: string) => csvToTable(join(dir, decodeURIComponent(href))))
