@@ -22,6 +22,9 @@ function renderInline(parent: ParentNode, spans: readonly InlineSpan[]): void {
       case 'text':
         parent.append(document.createTextNode(span.text))
         break
+      case 'break':
+        parent.append(document.createElement('br'))
+        break
       case 'code': {
         const code = document.createElement('code')
         code.className = 'cm-live-code'

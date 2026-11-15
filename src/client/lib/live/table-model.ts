@@ -13,6 +13,7 @@ export type InlineSpan =
   | { kind: 'code'; text: string }
   // href null: target not allowed by linkHref; rendered as its children only.
   | { kind: 'link'; href: string | null; children: InlineSpan[] }
+  | { kind: 'break' }
 
 /** One cell; an empty cell is []. */
 export type TableCell = InlineSpan[]
@@ -124,6 +125,8 @@ function readNode(doc: Text, node: SyntaxNode): InlineSpan {
     }
     case 'Escape':
       return { kind: 'text', text: doc.sliceString(node.from + 1, node.to) }
+    case 'HTMLTag':
+      return /^<br\s*\/?>$/i.test(doc.sliceString(node.from, node.to)) ? { kind: 'break' } : raw()
     case 'Image': {
       const [open, close] = node.getChildren('LinkMark')
       return open && close ? { kind: 'text', text: doc.sliceString(open.to, close.from) } : raw()

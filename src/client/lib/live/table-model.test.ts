@@ -220,4 +220,14 @@ describe('inline cell content', () => {
   it('keeps unsupported inline source as raw text and unescapes backslash escapes', () => {
     expect(cellOf('a\\*b &amp; <b>x</b>')).toEqual([t('a*b &amp; <b>x</b>')])
   })
+
+  it('reads <br> in any spelling as a break', () => {
+    const table = firstTable('| a<br>b | c<BR/>d |\n|---|---|\n| e<br />f | g |')
+    expect(table.model.header).toEqual([[t('a'), { kind: 'break' }, t('b')], [t('c'), { kind: 'break' }, t('d')]])
+    expect(table.model.rows).toEqual([[[t('e'), { kind: 'break' }, t('f')], [t('g')]]])
+  })
+
+  it('keeps a break inside a strong span', () => {
+    expect(cellOf('**x<br>y**')).toEqual([{ kind: 'strong', children: [t('x'), { kind: 'break' }, t('y')] }])
+  })
 })
