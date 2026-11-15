@@ -6,6 +6,11 @@
 //
 // Then: `sh <out-dir>/apply.sh --local` (or `--remote`).
 //
+// Note and folder ids are deterministic, so a re-import into the same account
+// needs every folder and note of the earlier import gone for good. Deleting the
+// `imported` folder moves its whole tree to the trash; emptying the trash (or
+// deleting those notes forever) removes them.
+//
 // Unzip with `ditto -x -k` on macOS: `unzip` garbles the non-ASCII names that
 // Notion stores without the UTF-8 flag.
 
@@ -312,7 +317,8 @@ for (const page of topLevel) emit(page, ROOT_ID, importTime)
 
 for (const image of images.values()) {
   sql.push(
-    `INSERT INTO images (id, owner, r2_key, bytes, width, height, source_url, created_at) VALUES ` +
+    // Image rows are never garbage-collected, so a re-import finds them again.
+    `INSERT OR IGNORE INTO images (id, owner, r2_key, bytes, width, height, source_url, created_at) VALUES ` +
       `(${q(image.id)}, ${q(OWNER)}, ${q(`img/${image.id}.webp`)}, ${image.bytes}, ${image.width}, ${image.height}, NULL, ${IMPORT_NOW});`,
   )
   counts.images++
