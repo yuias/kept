@@ -136,16 +136,6 @@
       <button
         type="button"
         class="icon-button"
-        aria-label={archiveLabel}
-        title={archiveLabel}
-        disabled={busy}
-        onclick={() => update({ archived: !note.archived })}
-      >
-        <Icon name={note.archived ? 'unarchive' : 'archive'} size={14} />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
         class:active={copyAction.state !== 'idle'}
         aria-label={copyLabel}
         title={copyLabel}
@@ -200,6 +190,16 @@
               }}
             >
               {note.locked ? m.editor.unlock : m.editor.lock}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                closeMenu()
+                void update({ archived: !note.archived })
+              }}
+            >
+              {archiveLabel}
             </button>
             <button
               type="button"
