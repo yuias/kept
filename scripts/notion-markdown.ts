@@ -127,6 +127,21 @@ export function joinBrokenTableRows(md: string): string {
   return out.join('\n')
 }
 
+/** A3: gives every top-level table an empty header row; the old header becomes the first data row. */
+export function addEmptyHeaders(md: string): string {
+  const tables = topLevelBlocks(md).filter((block) => block.name === 'Table')
+  if (tables.length === 0) return md
+  const lines = md.split('\n')
+  // Bottom-up, so the line numbers of the tables still to do stay valid.
+  for (const { firstLine } of tables.reverse()) {
+    const header = lines[firstLine]
+    const delimiter = lines[firstLine + 1]
+    const columns = delimiter.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').length
+    lines.splice(firstLine, 2, '|' + '  |'.repeat(columns), delimiter, header)
+  }
+  return lines.join('\n')
+}
+
 /** A1: drops the single blank line between top-level blocks wherever the parse stays the same. */
 export function collapseBlockGaps(md: string): string {
   const blocks = topLevelBlocks(md)

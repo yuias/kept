@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockSignature, collapseBlockGaps, countRowPipes, joinBrokenTableRows, topLevelBlocks } from '../../scripts/notion-markdown'
+import { addEmptyHeaders, blockSignature, collapseBlockGaps, countRowPipes, joinBrokenTableRows, topLevelBlocks } from '../../scripts/notion-markdown'
 
 const TABLE = '| x | y |\n| --- | --- |\n| 1 | 2 |'
 const FENCE = '```\ncode\n```'
@@ -185,5 +185,42 @@ describe('joinBrokenTableRows', () => {
 
   it('keeps the text around the table', () => {
     expect(joinBrokenTableRows(`before\n\n| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n\nafter`)).toBe(`before\n\n| h1 | h2 |\n${DELIMITER}\n| a | b<br>c |\n\nafter`)
+  })
+})
+
+describe('addEmptyHeaders', () => {
+  it('puts an empty header above the table and keeps the old header as a data row', () => {
+    expect(addEmptyHeaders('| a | b |\n| --- | --- |\n| 1 | 2 |')).toBe('|  |  |\n| --- | --- |\n| a | b |\n| 1 | 2 |')
+  })
+
+  it('keeps the alignment row', () => {
+    expect(addEmptyHeaders('| a | b |\n| :-- | --: |\n| 1 | 2 |')).toBe('|  |  |\n| :-- | --: |\n| a | b |\n| 1 | 2 |')
+  })
+
+  it('converts every table in a body and leaves the text around them', () => {
+    const md = `before\n\n${TABLE}\n\nbetween\n\n| p | q | r |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\nafter`
+    expect(addEmptyHeaders(md)).toBe(
+      'before\n\n|  |  |\n| --- | --- |\n| x | y |\n| 1 | 2 |\n\nbetween\n\n|  |  |  |\n| --- | --- | --- |\n| p | q | r |\n| 1 | 2 | 3 |\n\nafter',
+    )
+  })
+
+  it('leaves a table with only a header row as a table with an empty header', () => {
+    expect(addEmptyHeaders('| a | b |\n| --- | --- |')).toBe('|  |  |\n| --- | --- |\n| a | b |')
+  })
+
+  it('leaves tables inside a fence, a blockquote and a list item unchanged', () => {
+    for (const md of [`\`\`\`\n${TABLE}\n\`\`\``, '> | x | y |\n> | --- | --- |\n> | 1 | 2 |', '- | x | y |\n  | --- | --- |\n  | 1 | 2 |']) {
+      expect(addEmptyHeaders(md)).toBe(md)
+    }
+  })
+
+  it('returns a body without tables unchanged', () => {
+    expect(addEmptyHeaders('')).toBe('')
+    expect(addEmptyHeaders('# a\n\nb')).toBe('# a\n\nb')
+  })
+
+  it('produces a top-level table', () => {
+    expect(topLevelBlocks(addEmptyHeaders(`intro\n${TABLE}`)).map((block) => block.name)).toEqual(['Paragraph', 'Table'])
+    expect(topLevelBlocks(addEmptyHeaders(TABLE)).map((block) => block.name)).toEqual(['Table'])
   })
 })

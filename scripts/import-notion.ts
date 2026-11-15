@@ -15,7 +15,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { runnerImport } from 'vite'
-import { collapseBlockGaps, joinBrokenTableRows } from './notion-markdown.ts'
+import { addEmptyHeaders, collapseBlockGaps, joinBrokenTableRows } from './notion-markdown.ts'
 
 const { values: args } = parseArgs({
   options: {
@@ -260,8 +260,10 @@ const notesByNotionId = new Map<string, { id: string; title: string }>()
 function rewriteBody(page: Page): string {
   const dir = dirname(page.file)
   // Notion breaks a table row at a newline inside a cell; this runs first because
-  // the parser misreads such rows.
-  let body = joinBrokenTableRows(page.body)
+  // the parser misreads such rows. Notion's export does not say whether a page
+  // table had a header row, so page tables get an empty one. Tables built from
+  // database CSVs are substituted below, after this, and keep their real header.
+  let body = addEmptyHeaders(joinBrokenTableRows(page.body))
 
   // The export writes a bookmark block as a paragraph holding only a link, the
   // same as a link typed on its own line, so every such paragraph becomes a
