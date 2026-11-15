@@ -468,22 +468,23 @@ export const liveBlocks: Extension = [blockPlugin, previewField]
 
 export const blocksTheme = EditorView.theme({
   '.cm-line.cm-live-quote': {
-    borderLeft: '3px solid var(--border)',
-    paddingLeft: '0.8em',
+    borderLeft: '0.25em solid var(--border)',
+    paddingLeft: '1em',
     color: 'var(--text-muted)',
   },
-  '.cm-line.cm-live-quote.cm-live-quote-nest': { paddingLeft: '1.8em' },
+  '.cm-line.cm-live-quote.cm-live-quote-nest': { paddingLeft: '2em' },
   '.cm-line.cm-live-codeblock': {
     fontFamily: 'var(--mono)',
-    fontSize: '0.92em',
+    fontSize: '85%',
+    lineHeight: '1.45',
     background: CODE_TINT,
-    padding: '0 10px',
+    padding: '0 16px',
   },
-  '.cm-line.cm-live-codeblock-first': { borderTopLeftRadius: '6px', borderTopRightRadius: '6px', paddingTop: '4px' },
+  '.cm-line.cm-live-codeblock-first': { borderTopLeftRadius: '6px', borderTopRightRadius: '6px', paddingTop: '16px' },
   '.cm-line.cm-live-codeblock-last': {
     borderBottomLeftRadius: '6px',
     borderBottomRightRadius: '6px',
-    paddingBottom: '4px',
+    paddingBottom: '16px',
   },
   // Both marks get the same min width (wider than `•` and the bold `-`) and
   // margin, so the text stays put when the caret swaps one for the other.
@@ -512,7 +513,7 @@ export const blocksTheme = EditorView.theme({
   '.cm-live-image-preview .cm-live-image': { display: 'block' },
   '.cm-live-rule': {
     display: 'block',
-    height: '1px',
+    height: '0.25em',
     margin: '0.7em 0',
     background: 'var(--border)',
   },

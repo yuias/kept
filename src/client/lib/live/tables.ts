@@ -187,11 +187,11 @@ export const tableTheme: Extension = EditorView.theme({
   '.cm-live-table table': { borderCollapse: 'collapse', width: 'auto' },
   '.cm-live-table th, .cm-live-table td': {
     border: '1px solid var(--border)',
-    padding: '4px 10px',
+    padding: '6px 13px',
     verticalAlign: 'top',
   },
-  '.cm-live-table th': { background: 'var(--surface-muted)', fontWeight: '600' },
-  '.cm-live-table tbody tr:nth-child(even) td': { background: 'var(--surface)' },
+  '.cm-live-table th': { fontWeight: '600' },
+  '.cm-live-table tbody tr:nth-child(even) td': { background: 'var(--surface-muted)' },
   '@media (max-width: 720px)': {
     '.cm-live-table': { fontSize: '0.9em' },
     '.cm-live-table th, .cm-live-table td': { padding: '3px 6px' },

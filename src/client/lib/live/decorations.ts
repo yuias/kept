@@ -270,7 +270,8 @@ export const liveDecorations = ViewPlugin.fromClass(
  */
 export const CODE_TINT = 'color-mix(in srgb, var(--text) 6%, transparent)'
 
-const headingSizes: Record<number, string> = { 1: '1.7em', 2: '1.45em', 3: '1.25em', 4: '1.1em', 5: '1em', 6: '0.95em' }
+// Sizes and weights follow GitHub's markdown styles (github-markdown-css).
+const headingSizes: Record<number, string> = { 1: '2em', 2: '1.5em', 3: '1.25em', 4: '1em', 5: '0.875em', 6: '0.85em' }
 
 /** Colours come from the app palette variables, so light/dark needs no separate theme. */
 export const liveTheme = EditorView.theme({
@@ -289,22 +290,35 @@ export const liveTheme = EditorView.theme({
     Object.entries(headingSizes).map(([level, size]) => [
       `.cm-live-h${level}`,
       // Padding rather than margin: CodeMirror measures line heights without
-      // margins, so a margin would misplace the cursor and selection.
-      { fontSize: size, fontWeight: '700', lineHeight: '1.35', paddingTop: '0.5em' },
+      // margins, so a margin would misplace the cursor and selection. Smaller
+      // than GitHub's 24px margin because the blank line usually written
+      // before a heading still renders here; rem keeps it equal across levels.
+      { fontSize: size, fontWeight: '600', lineHeight: '1.25', paddingTop: '0.75rem' },
     ]),
   ),
+  // The rule is a background drawn inside the bottom padding, so the line
+  // below keeps a gap from it without a margin.
+  '.cm-live-h1, .cm-live-h2': {
+    paddingBottom: 'calc(0.3em + 0.5rem)',
+    backgroundImage: 'linear-gradient(var(--border), var(--border))',
+    backgroundSize: '100% 1px',
+    backgroundPosition: 'left bottom 0.5rem',
+    backgroundRepeat: 'no-repeat',
+  },
+  // A separate key: `.cm-live-h6` alone would replace the entry generated above.
+  '.cm-line.cm-live-h6': { color: 'var(--text-muted)' },
   // A heading on the first line sits directly under the note title.
   ...Object.fromEntries(Object.keys(headingSizes).map((level) => [`.cm-content > .cm-live-h${level}:first-child`, { paddingTop: '0' }])),
-  '.cm-live-strong': { fontWeight: '700' },
+  '.cm-live-strong': { fontWeight: '600' },
   '.cm-live-em': { fontStyle: 'italic' },
   '.cm-live-strike': { textDecoration: 'line-through', color: 'var(--text-muted)' },
   '.cm-live-code': {
     fontFamily: 'var(--mono)',
-    fontSize: '0.92em',
+    fontSize: '85%',
     background: CODE_TINT,
-    borderRadius: '4px',
-    padding: '0 3px',
+    borderRadius: '6px',
+    padding: '0.2em 0.4em',
   },
-  '.cm-live-link': { color: 'var(--accent)', textDecoration: 'underline' },
+  '.cm-live-link': { color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '0.2rem' },
   'a.cm-live-link': { cursor: 'pointer' },
 })
