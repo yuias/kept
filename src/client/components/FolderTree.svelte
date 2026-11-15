@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { moveSibling, reorderSiblings, type FolderTreeNode } from '../../shared/folder-tree'
+  import { isDescendantOrSelf, moveSibling, reorderSiblings, type FolderTreeNode } from '../../shared/folder-tree'
   import type { Folder } from '../../shared/types'
   import {
     canCreateSubfolder,
@@ -15,9 +15,10 @@
     toggleFolderExpanded,
   } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
+  import { reloadLabels } from '../lib/labels.svelte'
   import { closeMenu, isMenuOpen, menuRoot, toggleMenu } from '../lib/menu.svelte'
   import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
-  import { moveNoteToFolder } from '../lib/note-moves.svelte'
+  import { bumpNotesVersion, moveNoteToFolder } from '../lib/note-moves.svelte'
   import { currentRoute, navigate, link } from '../lib/router.svelte'
   import { settings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
@@ -152,12 +153,13 @@
   async function handleDelete(folder: Folder): Promise<void> {
     closeMenu()
     if (!window.confirm(m.folders.deleteConfirm(folder.name))) return
-    const ok = await removeFolder(folder.id)
-    // Its notes and subfolders moved to the parent, so a route pointing at
-    // the now-gone folder would 404; send the user up one level instead.
-    if (ok && route.name === 'folder' && route.id === folder.id) {
-      navigate(folder.parentId ? `/folder/${encodeURIComponent(folder.parentId)}` : '/')
-    }
+    // Decided before the delete: the reload that follows no longer has the subtree.
+    const viewingDeleted = route.name === 'folder' && isDescendantOrSelf(folders(), folder.id, route.id)
+    if (!(await removeFolder(folder.id))) return
+    bumpNotesVersion()
+    void reloadLabels()
+    // The folder and its subfolders are gone, so a route to any of them would 404.
+    if (viewingDeleted) navigate(folder.parentId ? `/folder/${encodeURIComponent(folder.parentId)}` : '/')
   }
 </script>
 

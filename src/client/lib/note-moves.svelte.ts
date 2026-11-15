@@ -5,9 +5,13 @@ import type { NoteDragPayload } from './note-drag'
 
 const state = $state<{ version: number; error: string | null }>({ version: 0, error: null })
 
-/** Bumped after a note is moved from outside NotesView, so the grid can reload. */
+/** Bumped after notes change outside NotesView (a sidebar move, a folder delete), so the grid can reload. */
 export function notesVersion(): number {
   return state.version
+}
+
+export function bumpNotesVersion(): void {
+  state.version += 1
 }
 
 export function noteMoveError(): string | null {
@@ -20,7 +24,7 @@ export async function moveNoteToFolder(payload: NoteDragPayload, folderId: strin
   if (payload.folderId === folderId) return
   try {
     await updateNote(payload.id, { folderId })
-    state.version += 1
+    bumpNotesVersion()
   } catch (cause) {
     state.error = describeApiError(cause, messages())
   }

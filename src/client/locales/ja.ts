@@ -42,7 +42,7 @@ export const ja: Messages = {
     moveTitle: 'フォルダを移動',
     delete: '削除',
     deleteConfirm: (name: string) =>
-      `「${name}」を削除しますか？中のノートとサブフォルダは親フォルダに移動します。`,
+      `「${name}」とサブフォルダを削除しますか？中のノートはゴミ箱に移動します。`,
     reorderDisabled: '設定でフォルダの並び順を「手動」にすると、ドラッグで並べ替えられます',
     noFolder: 'フォルダなし',
     cancel: 'キャンセル',

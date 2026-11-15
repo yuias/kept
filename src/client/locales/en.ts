@@ -50,7 +50,7 @@ export const en = {
     moveTitle: 'Move folder',
     delete: 'Delete',
     deleteConfirm: (name: string) =>
-      `Delete "${name}"? Its notes and subfolders move to the parent folder.`,
+      `Delete "${name}" and its subfolders? Their notes move to the trash.`,
     reorderDisabled: 'Set the folder sort order to Manual in Settings to reorder by dragging',
     noFolder: 'No folder',
     cancel: 'Cancel',
