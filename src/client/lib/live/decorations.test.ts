@@ -126,6 +126,12 @@ describe('headings', () => {
     expect(hidden(specsFor(doc), doc)).toEqual(['# ', ' #'])
   })
 
+  it('adds heading gaps only where no blank line separates the heading', () => {
+    const gaps = (doc: string) => classes(specsFor(doc, 0)).filter((c) => c.startsWith('cm-live-h-'))
+    expect(gaps('# a\n- x\n## b\n- y')).toEqual(['cm-live-h-below', 'cm-live-h-above', 'cm-live-h-below'])
+    expect(gaps('# a\n\n- x\n\n## b\n\n- y')).toEqual([])
+  })
+
   it('styles setext heading text and leaves the underline visible', () => {
     const doc = 'Title\n=====\n\nx'
     const specs = specsFor(doc)

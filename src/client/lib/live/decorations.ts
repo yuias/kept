@@ -91,7 +91,17 @@ export function collectSpecs(state: EditorState, ranges: readonly TextRange[]): 
         const atx = /^ATXHeading([1-6])$/.exec(name)
         if (atx) {
           const level = atx[1]
-          specs.push({ kind: 'line', from: doc.lineAt(ref.from).from, className: `cm-live-h${level}` })
+          const headingLine = doc.lineAt(ref.from)
+          specs.push({ kind: 'line', from: headingLine.from, className: `cm-live-h${level}` })
+          // GitHub's heading margins, only where no blank line already
+          // separates the heading, so spacing does not depend on blank lines.
+          const n = headingLine.number
+          if (n > 1 && doc.line(n - 1).text.trim() !== '') {
+            specs.push({ kind: 'line', from: headingLine.from, className: 'cm-live-h-above' })
+          }
+          if (n < doc.lines && doc.line(n + 1).text.trim() !== '') {
+            specs.push({ kind: 'line', from: headingLine.from, className: 'cm-live-h-below' })
+          }
           const marks = ref.node.getChildren('HeaderMark')
           const open = marks[0]
           if (open) {
@@ -289,26 +299,25 @@ export const liveTheme = EditorView.theme({
   ...Object.fromEntries(
     Object.entries(headingSizes).map(([level, size]) => [
       `.cm-live-h${level}`,
-      // Padding rather than margin: CodeMirror measures line heights without
-      // margins, so a margin would misplace the cursor and selection. Smaller
-      // than GitHub's 24px margin because the blank line usually written
-      // before a heading still renders here; rem keeps it equal across levels.
-      { fontSize: size, fontWeight: '600', lineHeight: '1.25', paddingTop: '0.75rem' },
+      { fontSize: size, fontWeight: '600', lineHeight: '1.25', paddingBottom: 'var(--cm-live-h-gap-below, 0px)' },
     ]),
   ),
+  // GitHub's 24px / 16px heading margins, as padding: CodeMirror measures
+  // line heights without margins, so a margin would misplace the cursor and
+  // selection. rem, because em would scale with each heading's size.
+  '.cm-line.cm-live-h-above': { paddingTop: '1.5rem' },
+  '.cm-line.cm-live-h-below': { '--cm-live-h-gap-below': '1rem' },
   // The rule is a background drawn inside the bottom padding, so the line
   // below keeps a gap from it without a margin.
-  '.cm-live-h1, .cm-live-h2': {
-    paddingBottom: 'calc(0.3em + 0.5rem)',
+  '.cm-line.cm-live-h1, .cm-line.cm-live-h2': {
+    paddingBottom: 'calc(0.3em + var(--cm-live-h-gap-below, 0px))',
     backgroundImage: 'linear-gradient(var(--border), var(--border))',
     backgroundSize: '100% 1px',
-    backgroundPosition: 'left bottom 0.5rem',
+    backgroundPosition: 'left bottom var(--cm-live-h-gap-below, 0px)',
     backgroundRepeat: 'no-repeat',
   },
   // A separate key: `.cm-live-h6` alone would replace the entry generated above.
   '.cm-line.cm-live-h6': { color: 'var(--text-muted)' },
-  // A heading on the first line sits directly under the note title.
-  ...Object.fromEntries(Object.keys(headingSizes).map((level) => [`.cm-content > .cm-live-h${level}:first-child`, { paddingTop: '0' }])),
   '.cm-live-strong': { fontWeight: '600' },
   '.cm-live-em': { fontStyle: 'italic' },
   '.cm-live-strike': { textDecoration: 'line-through', color: 'var(--text-muted)' },
