@@ -923,7 +923,7 @@
   .note-editor {
     width: min(900px, 92vw);
     max-height: 90vh;
-    padding: 16px;
+    padding: 20px 28px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1020,7 +1020,7 @@
       max-height: none;
       border: 0;
       border-radius: 0;
-      padding: 12px;
+      padding: 12px 16px;
       gap: 8px;
     }
 
