@@ -84,6 +84,11 @@ class LinkCardWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
+    // CodeMirror measures a block widget without its margins, so the spacing
+    // is padding on this wrapper; a margin would shift every later line's
+    // height and send clicks and arrow keys to the wrong line.
+    const wrapper = document.createElement('div')
+    wrapper.className = 'cm-live-card-block'
     const dom = document.createElement('div')
     dom.className = 'cm-live-card'
     dom.dataset.url = this.url
@@ -97,12 +102,14 @@ class LinkCardWidget extends WidgetType {
     })
     drawnBy.set(dom, this)
     this.render(dom, view, this.preview)
-    return dom
+    wrapper.append(dom)
+    return wrapper
   }
 
   // A different url needs fresh handlers, so only the same card is updated in place.
-  updateDOM(dom: HTMLElement, view: EditorView): boolean {
-    if (dom.dataset.url !== this.url) return false
+  updateDOM(wrapper: HTMLElement, view: EditorView): boolean {
+    const dom = wrapper.firstElementChild
+    if (!(dom instanceof HTMLElement) || dom.dataset.url !== this.url) return false
     drawnBy.set(dom, this)
     this.render(dom, view, this.preview)
     return true
@@ -246,6 +253,9 @@ export const cardField = StateField.define<CardFieldValue>({
 export const linkCards: Extension = [cardField]
 
 export const cardTheme = EditorView.theme({
+  '.cm-live-card-block': { padding: '4px 0' },
+  // Keeps the 4px gap that collapsing margins used to give between consecutive cards.
+  '.cm-live-card-block + .cm-live-card-block': { paddingTop: '0' },
   '.cm-live-card': {
     display: 'flex',
     position: 'relative',
@@ -255,7 +265,6 @@ export const cardTheme = EditorView.theme({
     // Nowrap titles and URLs must not widen the editor's min-content size.
     contain: 'inline-size',
     height: '120px',
-    margin: '4px 0',
     lineHeight: '1.4',
     border: '1px solid var(--border)',
     borderRadius: '6px',

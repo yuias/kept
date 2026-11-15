@@ -314,8 +314,8 @@ class ImageWidget extends WidgetType {
 
   // Editing the alt text keeps the loaded <img> instead of recreating it.
   updateDOM(dom: HTMLElement): boolean {
-    const img = dom as HTMLImageElement
-    if (img.classList.contains('cm-live-image-preview') !== this.preview) return false
+    if (dom.classList.contains('cm-live-image-preview') !== this.preview) return false
+    const img = (this.preview ? dom.firstElementChild : dom) as HTMLImageElement
     if (img.getAttribute('src') !== this.src) img.src = this.src
     img.alt = this.alt
     return true
@@ -326,11 +326,17 @@ class ImageWidget extends WidgetType {
     img.src = this.src
     img.alt = this.alt
     img.draggable = false
-    img.className = this.preview ? 'cm-live-image cm-live-image-preview' : 'cm-live-image'
+    img.className = 'cm-live-image'
     // Loading changes line heights, which the editor has to re-measure.
     img.addEventListener('load', () => view.requestMeasure())
     img.addEventListener('error', () => view.requestMeasure())
-    return img
+    if (!this.preview) return img
+    // The preview is a block widget, which CodeMirror measures without its
+    // margins, so its spacing is padding on a wrapper around the rounded image.
+    const wrapper = document.createElement('div')
+    wrapper.className = 'cm-live-image-preview'
+    wrapper.append(img)
+    return wrapper
   }
 
   // Let clicks reach the editor so they move the caret and reveal the source.
@@ -494,7 +500,8 @@ export const blocksTheme = EditorView.theme({
     borderRadius: '6px',
     verticalAlign: 'middle',
   },
-  '.cm-live-image-preview': { display: 'block', margin: '4px 0' },
+  '.cm-live-image-preview': { padding: '4px 0' },
+  '.cm-live-image-preview .cm-live-image': { display: 'block' },
   '.cm-live-rule': {
     display: 'block',
     height: '1px',

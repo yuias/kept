@@ -171,7 +171,8 @@ export const tableTheme: Extension = EditorView.theme({
     // The table's min-content width must not widen the editor.
     contain: 'inline-size',
     overflowX: 'auto',
-    margin: '4px 0',
+    // Padding, not margin: CodeMirror measures a block widget without its margins.
+    padding: '4px 0',
     // Undo the inherited lineWrapping rules, which would squeeze columns to one character.
     whiteSpace: 'normal',
     overflowWrap: 'normal',
