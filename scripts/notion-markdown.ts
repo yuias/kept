@@ -56,6 +56,77 @@ export function blockSignature(md: string): string[] {
   return names
 }
 
+/**
+ * Unescaped `|` count, using the same rule @lezer/markdown uses to split table
+ * rows. Pipes inside code spans count too, because lezer and GFM split cells
+ * there as well.
+ */
+export function countRowPipes(line: string): number {
+  let count = 0
+  let esc = false
+  for (const ch of line) {
+    if (ch === '|' && !esc) count++
+    esc = !esc && ch === '\\'
+  }
+  return count
+}
+
+const DELIMITER_ROW = /^\|(?:[ \t]*:?-+:?[ \t]*\|)+[ \t]*$/
+
+/** A2: rejoins table rows that Notion broke at newlines inside cells, using `<br>`. */
+export function joinBrokenTableRows(md: string): string {
+  const starts = lineStarts(md)
+  const lines = md.split('\n')
+
+  // The parser misreads broken rows, so it is only used to keep out of code.
+  const codeLines = new Set<number>()
+  markdownLanguage.parser.parse(md).iterate({
+    enter(node) {
+      if (node.name !== 'FencedCode' && node.name !== 'CodeBlock') return
+      const end = node.to > node.from && md[node.to - 1] === '\n' ? node.to - 1 : node.to
+      for (let line = lineAt(starts, node.from); line <= lineAt(starts, end); line++) codeLines.add(line)
+    },
+  })
+
+  const complete = (row: string, columns: number): boolean => countRowPipes(row) === columns + 1 && row.trimEnd().endsWith('|')
+
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (codeLines.has(i) || !lines[i].startsWith('|')) {
+      out.push(lines[i++])
+      continue
+    }
+    let end = i
+    while (end < lines.length && lines[end].trim() !== '' && !codeLines.has(end)) end++
+    // The block [i, end) is a table only if it has a delimiter row; Notion
+    // always writes one, and it fixes the column count.
+    let d = i + 1
+    while (d < end && !DELIMITER_ROW.test(lines[d])) d++
+    const columns = d < end ? countRowPipes(lines[d]) - 1 : 0
+    const header = d < end ? lines.slice(i, d).join('<br>') : ''
+    if (d >= end || !complete(header, columns)) {
+      out.push(...lines.slice(i, end))
+      i = end
+      continue
+    }
+    out.push(header, lines[d])
+    let j = d + 1
+    while (j < end && lines[j].startsWith('|')) {
+      let k = j
+      let row = lines[j]
+      while (!complete(row, columns) && countRowPipes(row) <= columns + 1 && k + 1 < end) row += '<br>' + lines[++k]
+      if (!complete(row, columns)) break
+      out.push(row)
+      j = k + 1
+    }
+    // Whatever is left (a line that is not a row, or an unrepairable row) stays as written.
+    out.push(...lines.slice(j, end))
+    i = end
+  }
+  return out.join('\n')
+}
+
 /** A1: drops the single blank line between top-level blocks wherever the parse stays the same. */
 export function collapseBlockGaps(md: string): string {
   const blocks = topLevelBlocks(md)

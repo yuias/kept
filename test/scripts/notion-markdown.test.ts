@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockSignature, collapseBlockGaps, topLevelBlocks } from '../../scripts/notion-markdown'
+import { blockSignature, collapseBlockGaps, countRowPipes, joinBrokenTableRows, topLevelBlocks } from '../../scripts/notion-markdown'
 
 const TABLE = '| x | y |\n| --- | --- |\n| 1 | 2 |'
 const FENCE = '```\ncode\n```'
@@ -100,5 +100,90 @@ describe('collapseBlockGaps', () => {
     expect(collapse('')).toBe('')
     expect(collapse('# only')).toBe('# only')
     expect(collapse('a\nb')).toBe('a\nb')
+  })
+})
+
+describe('countRowPipes', () => {
+  it('counts the pipes of a row', () => {
+    expect(countRowPipes('| a | b |')).toBe(3)
+  })
+
+  it('counts pipes inside code spans, as the table parser does', () => {
+    expect(countRowPipes('| `a|b` |')).toBe(3)
+  })
+
+  it('does not count an escaped pipe, but counts one after an escaped backslash', () => {
+    expect(countRowPipes('| a \\| b |')).toBe(2)
+    expect(countRowPipes('| a \\\\| b |')).toBe(3)
+  })
+})
+
+describe('joinBrokenTableRows', () => {
+  const DELIMITER = '| --- | --- |'
+
+  it('joins a data row broken over two lines', () => {
+    expect(joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n| d | e |`)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a | b<br>c |\n| d | e |`)
+  })
+
+  it('joins a data row broken over three lines', () => {
+    expect(joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a | b\nc\nd |\n| e | f |`)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a | b<br>c<br>d |\n| e | f |`)
+  })
+
+  it('joins a continuation that starts in the first cell', () => {
+    expect(joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a\nb | c |`)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a<br>b | c |`)
+  })
+
+  it('joins a header broken before the delimiter, which makes it a table', () => {
+    const md = `| h1 | h2\nh3 |\n${DELIMITER}\n| a | b |`
+    expect(topLevelBlocks(md).map((block) => block.name)).not.toContain('Table')
+    const out = joinBrokenTableRows(md)
+    expect(out).toBe(`| h1 | h2<br>h3 |\n${DELIMITER}\n| a | b |`)
+    expect(topLevelBlocks(out)).toEqual([{ name: 'Table', firstLine: 0, lastLine: 2 }])
+  })
+
+  it('does not count an escaped pipe as a cell boundary when joining', () => {
+    expect(joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a \\| b | c\nd |`)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a \\| b | c<br>d |`)
+  })
+
+  it('counts a pipe after an escaped backslash and a pipe inside backticks', () => {
+    // Both rows are complete with 3 pipes, so nothing is joined.
+    const md = `| h1 | h2 |\n${DELIMITER}\n| a \\\\| b |\n| \`x|y\` |`
+    expect(joinBrokenTableRows(md)).toBe(md)
+  })
+
+  it('leaves a blank line inside a cell as it is', () => {
+    const md = `| h1 | h2 |\n${DELIMITER}\n| a | b\n\nc |\n| d | e |`
+    expect(joinBrokenTableRows(md)).toBe(md)
+  })
+
+  it('stops at an overshooting join and leaves that row and the rest unchanged', () => {
+    const md = `| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n| d | e | f |\n| g | h |`
+    expect(joinBrokenTableRows(md)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a | b<br>c |\n| d | e | f |\n| g | h |`)
+    const overshoot = `| h1 | h2 |\n${DELIMITER}\n| a | b\n| c | d |`
+    expect(joinBrokenTableRows(overshoot)).toBe(overshoot)
+  })
+
+  it('leaves a table that looks broken inside a fenced code block', () => {
+    const md = `\`\`\`\n| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n\`\`\``
+    expect(joinBrokenTableRows(md)).toBe(md)
+  })
+
+  it('leaves a line directly under a repaired table that is not a row', () => {
+    expect(joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n- item`)).toBe(`| h1 | h2 |\n${DELIMITER}\n| a | b<br>c |\n- item`)
+  })
+
+  it('leaves a block without a delimiter row alone', () => {
+    const md = '| a | b\nc |\n| d | e |'
+    expect(joinBrokenTableRows(md)).toBe(md)
+  })
+
+  it('leaves a well-formed table unchanged, and its own output unchanged', () => {
+    expect(joinBrokenTableRows(TABLE)).toBe(TABLE)
+    const once = joinBrokenTableRows(`| h1 | h2 |\n${DELIMITER}\n| a | b\nc |`)
+    expect(joinBrokenTableRows(once)).toBe(once)
+  })
+
+  it('keeps the text around the table', () => {
+    expect(joinBrokenTableRows(`before\n\n| h1 | h2 |\n${DELIMITER}\n| a | b\nc |\n\nafter`)).toBe(`before\n\n| h1 | h2 |\n${DELIMITER}\n| a | b<br>c |\n\nafter`)
   })
 })
