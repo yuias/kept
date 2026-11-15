@@ -46,6 +46,24 @@ describe('markdownToPlain', () => {
     expect(markdownToPlain('foo <b>bar</b> baz')).toBe('foo bar baz')
   })
 
+  it('turns a <br> into a space', () => {
+    expect(markdownToPlain('x<br>y')).toBe('x y')
+  })
+
+  it('turns a <br> in a table cell into a space', () => {
+    expect(markdownToPlain('| a<br>b | c<br/>d |\n| --- | --- |\n| e<BR />f | g |')).toBe('a b c d\ne f g')
+  })
+
+  it('leaves out an empty table header row', () => {
+    expect(markdownToPlain('x\n\n|  |  |\n| --- | --- |\n| a | b |')).toBe('x\na b')
+  })
+
+  it('puts consecutive card lines on adjacent lines', () => {
+    expect(markdownToPlain('@[card](https://a.example)\n@[card](https://b.example)')).toBe(
+      'https://a.example\nhttps://b.example',
+    )
+  })
+
   it('removes tags from an HTML block', () => {
     expect(markdownToPlain('<div>\nblock content\n</div>')).toBe('block content')
   })

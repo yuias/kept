@@ -72,8 +72,11 @@ function listToLines(list: Tokens.List): string[] {
 }
 
 function tableToText(table: Tokens.Table): string {
-  const rows = [table.header, ...table.rows]
-  return rows.map((row) => row.map((cell) => inlineToText(cell.tokens)).join(' ')).join('\n')
+  const toLine = (row: Tokens.TableCell[]) => row.map((cell) => inlineToText(cell.tokens)).join(' ')
+  const rows = table.rows.map(toLine)
+  // A headerless table is written with an empty header row, which would add a blank line.
+  if (!table.header.every((cell) => inlineToText(cell.tokens).trim() === '')) rows.unshift(toLine(table.header))
+  return rows.join('\n')
 }
 
 // marked lexes a card line as text `@` plus a link token, which would
@@ -115,8 +118,10 @@ function inlineTokenToText(token: Token): string {
       return ''
     case 'br':
       return ' '
-    case 'html':
-      return stripTags((token as Tokens.HTML).text)
+    case 'html': {
+      const text = (token as Tokens.HTML).text
+      return /^<br\s*\/?>$/i.test(text.trim()) ? ' ' : stripTags(text)
+    }
     default: {
       const generic = token as Tokens.Generic
       if (Array.isArray(generic.tokens)) return inlineToText(generic.tokens)
