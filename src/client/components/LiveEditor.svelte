@@ -13,6 +13,7 @@
   import { onMount, untrack } from 'svelte'
   import { messages } from '../lib/i18n.svelte'
   import { placeholderRange } from '../lib/image/insert'
+  import { blockMotion } from '../lib/live/block-motion'
   import { allowTaskToggle, blocksTheme, liveBlocks, taskLabel } from '../lib/live/blocks'
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
   import { formatKeys } from '../lib/live/format'
@@ -90,6 +91,7 @@
           linkClicks,
           linkCards,
           liveTables,
+          blockMotion,
           cardLabels.of(() => ({ edit: messages().editor.editCard })),
           taskLabel.of(() => messages().editor.toggleTask),
           liveTheme,
