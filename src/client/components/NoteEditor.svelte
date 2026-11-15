@@ -11,6 +11,7 @@
   import { formatEdited, formatFullTimestamp } from '../lib/datetime'
   import { isOutsideRect } from '../lib/dialog'
   import { clearDraft, type Draft, NEW_NOTE_DRAFT, readDraft, writeDraft } from '../lib/drafts'
+  import { shouldDiscardOnClose } from '../lib/empty-note'
   import { describeApiError } from '../lib/errors'
   import { formatToCommit, nextFormat, showsDefault } from '../lib/format-toggle'
   import { folderById, folders } from '../lib/folders.svelte'
@@ -101,6 +102,10 @@
   // still in it, and the eventual replacement would land on an unmounted
   // component with nowhere left to persist it.
   const inflightImages = new Set<Promise<void>>()
+
+  // Set by this editor's Trash button. Not reactive: assigning `trashedAt`
+  // there would flash the read-only trash UI before the dialog closes.
+  let trashedHere = false
 
   const trashed = $derived(trashedAt !== null)
   const readOnly = $derived(trashed || locked)
@@ -254,8 +259,22 @@
     // reload.
     void (async () => {
       await Promise.allSettled([...inflightImages])
-      await autosave.flush()
+      const flushed = await autosave.flush()
       await commitFormat()
+      const id = noteId
+      if (
+        id &&
+        shouldDiscardOnClose({ initialId, noteId: id, trashed: trashedAt !== null || trashedHere, flushed, title, body })
+      ) {
+        try {
+          // The server only deletes trashed notes for good.
+          await trashNote(id)
+          await deleteNoteForever(id)
+          clearDraft(id)
+        } catch {
+          // Offline or similar: the empty note stays, as it did before this check.
+        }
+      }
       onsettled()
       // Covers every path that changes label counts while this note was
       // open: an edited label, a trash/restore, or a permanent delete.
@@ -585,6 +604,7 @@
       // Committed before trashing: after the trash, the PATCH would hit a 409.
       if (!(await commitFormat())) return
       await trashNote(noteId)
+      trashedHere = true
       close()
     } catch (cause) {
       saveError = describeApiError(cause, m)
