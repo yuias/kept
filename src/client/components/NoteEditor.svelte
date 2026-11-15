@@ -267,10 +267,15 @@
         shouldDiscardOnClose({ initialId, noteId: id, trashed: trashedAt !== null || trashedHere, flushed, title, body })
       ) {
         try {
-          // The server only deletes trashed notes for good.
-          await trashNote(id)
-          await deleteNoteForever(id)
-          clearDraft(id)
+          // The server only deletes trashed notes for good. The trash response
+          // is the server's copy: another tab may have filled the note in since.
+          const stored = await trashNote(id)
+          if (stored.title.trim() !== '' || stored.body.trim() !== '') {
+            await restoreNote(id)
+          } else {
+            await deleteNoteForever(id)
+            clearDraft(id)
+          }
         } catch {
           // Offline or similar: the empty note stays, as it did before this check.
         }
