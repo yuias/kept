@@ -288,9 +288,13 @@ export const liveTheme = EditorView.theme({
   ...Object.fromEntries(
     Object.entries(headingSizes).map(([level, size]) => [
       `.cm-live-h${level}`,
-      { fontSize: size, fontWeight: '700', lineHeight: '1.35' },
+      // Padding rather than margin: CodeMirror measures line heights without
+      // margins, so a margin would misplace the cursor and selection.
+      { fontSize: size, fontWeight: '700', lineHeight: '1.35', paddingTop: '0.5em' },
     ]),
   ),
+  // A heading on the first line sits directly under the note title.
+  ...Object.fromEntries(Object.keys(headingSizes).map((level) => [`.cm-content > .cm-live-h${level}:first-child`, { paddingTop: '0' }])),
   '.cm-live-strong': { fontWeight: '700' },
   '.cm-live-em': { fontStyle: 'italic' },
   '.cm-live-strike': { textDecoration: 'line-through', color: 'var(--text-muted)' },
