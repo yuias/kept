@@ -56,6 +56,22 @@ describe('column mapping', () => {
   })
 })
 
+describe('headerless', () => {
+  it('is true when every header cell is empty and a row follows', () => {
+    const { model } = firstTable('|  |  |\n| --- | --- |\n| a | b |')
+    expect(model.headerless).toBe(true)
+    expect(model.rows).toEqual([[text('a'), text('b')]])
+  })
+
+  it('is false when any header cell has content', () => {
+    expect(firstTable('| a |  |\n|---|---|\n| 1 | 2 |').model.headerless).toBe(false)
+  })
+
+  it('is false without rows, so the empty header row stays clickable', () => {
+    expect(firstTable('|  |  |\n| --- | --- |').model.headerless).toBe(false)
+  })
+})
+
 describe('readAlignments', () => {
   it('reads left, center, right and none', () => {
     expect(readAlignments('| :-- | :-: | --: | --- |')).toEqual(['left', 'center', 'right', null])
@@ -76,7 +92,7 @@ describe('collectTables', () => {
         from,
         to: from + source.length,
         source,
-        model: { align: [null, 'right'], header: [text('a'), text('b')], rows: [[text('1'), text('2')]] },
+        model: { align: [null, 'right'], header: [text('a'), text('b')], rows: [[text('1'), text('2')]], headerless: false },
       },
     ])
   })

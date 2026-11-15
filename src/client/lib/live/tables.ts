@@ -86,13 +86,15 @@ class TableWidget extends WidgetType {
   }
 
   toDOM(): HTMLElement {
-    const { align, header, rows } = this.model
+    const { align, header, rows, headerless } = this.model
     const wrap = document.createElement('div')
     wrap.className = 'cm-live-table'
     const table = document.createElement('table')
-    const thead = document.createElement('thead')
-    thead.append(buildRow('th', header, align))
-    table.append(thead)
+    if (!headerless) {
+      const thead = document.createElement('thead')
+      thead.append(buildRow('th', header, align))
+      table.append(thead)
+    }
     if (rows.length > 0) {
       const tbody = document.createElement('tbody')
       for (const row of rows) tbody.append(buildRow('td', row, align))

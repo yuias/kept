@@ -21,6 +21,8 @@ export interface TableModel {
   align: Align[]
   header: TableCell[]
   rows: TableCell[][]
+  /** Every header cell is empty and there is at least one row: drawn without a header row. */
+  headerless: boolean
 }
 
 export interface TableBlock {
@@ -172,12 +174,11 @@ export function readTable(doc: Text, table: SyntaxNode): TableModel {
   const delimiter = table.getChild('TableDelimiter')
   const align = readAlignments(delimiter ? doc.sliceString(delimiter.from, delimiter.to) : '')
   const count = align.length
-  const header = table.getChild('TableHeader')
-  return {
-    align,
-    header: header ? readRow(doc, header, count) : Array.from({ length: count }, () => []),
-    rows: table.getChildren('TableRow').map((row) => readRow(doc, row, count)),
-  }
+  const headerNode = table.getChild('TableHeader')
+  const header = headerNode ? readRow(doc, headerNode, count) : Array.from({ length: count }, () => [])
+  const rows = table.getChildren('TableRow').map((row) => readRow(doc, row, count))
+  // A table without rows keeps its empty header row so the widget has something to click.
+  return { align, header, rows, headerless: rows.length > 0 && header.every((cell) => cell.length === 0) }
 }
 
 /** Every top-level table in the parsed document, in document order. */
