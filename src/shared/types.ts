@@ -99,12 +99,15 @@ export interface AppSettings {
   folderSort: FolderSort
   /** Days a note stays in the trash before the daily purge deletes it; null = never. */
   trashRetentionDays: number | null
+  /** Folders whose notes, subfolders included, are left out of the main Notes list. */
+  hiddenFolderIds: string[]
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   defaultFormat: 'formatted',
   folderSort: 'name',
   trashRetentionDays: TRASH_RETENTION_DEFAULT_DAYS,
+  hiddenFolderIds: [],
 }
 
 export interface ImageUploadResponse {

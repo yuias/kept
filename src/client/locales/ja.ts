@@ -40,6 +40,8 @@ export const ja: Messages = {
     renamePrompt: '新しいフォルダ名',
     move: '移動…',
     moveTitle: 'フォルダを移動',
+    hideFromNotes: 'ノート一覧に表示しない',
+    showInNotes: 'ノート一覧に表示する',
     delete: '削除',
     deleteConfirm: (name: string) =>
       `「${name}」とサブフォルダを削除しますか？中のノートはゴミ箱に移動します。`,

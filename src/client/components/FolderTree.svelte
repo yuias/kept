@@ -20,7 +20,7 @@
   import { isNoteDrag, readNoteDrag } from '../lib/note-drag'
   import { bumpNotesVersion, moveNoteToFolder } from '../lib/note-moves.svelte'
   import { currentRoute, navigate, link } from '../lib/router.svelte'
-  import { settings } from '../lib/settings.svelte'
+  import { settings, updateSettings } from '../lib/settings.svelte'
   import FolderPicker from './FolderPicker.svelte'
   import FolderTree from './FolderTree.svelte'
 
@@ -150,6 +150,12 @@
     if (next) await reorderFolders(nodes[0]?.folder.parentId ?? null, next)
   }
 
+  async function handleToggleHidden(id: string): Promise<void> {
+    closeMenu()
+    const hidden = settings().hiddenFolderIds
+    await updateSettings({ hiddenFolderIds: hidden.includes(id) ? hidden.filter((h) => h !== id) : [...hidden, id] })
+  }
+
   async function handleDelete(folder: Folder): Promise<void> {
     closeMenu()
     if (!window.confirm(m.folders.deleteConfirm(folder.name))) return
@@ -249,6 +255,9 @@
               </button>
               <button type="button" role="menuitem" onclick={() => handleMoveClick(node.folder)}>
                 {m.folders.move}
+              </button>
+              <button type="button" role="menuitem" onclick={() => handleToggleHidden(node.folder.id)}>
+                {settings().hiddenFolderIds.includes(node.folder.id) ? m.folders.showInNotes : m.folders.hideFromNotes}
               </button>
               <button type="button" role="menuitem" class="danger" onclick={() => handleDelete(node.folder)}>
                 {m.folders.delete}

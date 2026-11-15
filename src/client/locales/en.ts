@@ -48,6 +48,8 @@ export const en = {
     renamePrompt: 'New folder name',
     move: 'Move…',
     moveTitle: 'Move folder',
+    hideFromNotes: 'Hide from Notes',
+    showInNotes: 'Show in Notes',
     delete: 'Delete',
     deleteConfirm: (name: string) =>
       `Delete "${name}" and its subfolders? Their notes move to the trash.`,

@@ -31,6 +31,7 @@ describe('effectiveFormat', () => {
     defaultFormat: 'syntax',
     folderSort: 'name',
     trashRetentionDays: 30,
+    hiddenFolderIds: [],
   }
 
   it('maps inherit to the default format', () => {

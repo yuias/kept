@@ -1,17 +1,19 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import { isDescendantOrSelf } from '../../shared/folder-tree'
   import type { NoteSummary, UpdateNoteInput } from '../../shared/types'
   import FolderPicker from '../components/FolderPicker.svelte'
   import NoteEditor from '../components/NoteEditor.svelte'
   import NoteGrid from '../components/NoteGrid.svelte'
   import { emptyTrash as emptyTrashRequest, listNotes, restoreNote, trashNote, updateNote } from '../lib/api'
   import { describeApiError } from '../lib/errors'
-  import { folderById, folders } from '../lib/folders.svelte'
+  import { folderById, folders, foldersReady } from '../lib/folders.svelte'
   import { messages } from '../lib/i18n.svelte'
   import { reloadLabels } from '../lib/labels.svelte'
   import { notesVersion } from '../lib/note-moves.svelte'
   import { closeNote, currentRoute, openNote } from '../lib/router.svelte'
   import { noteParam, type ListQuery } from '../lib/routes'
+  import { settings, settingsReady } from '../lib/settings.svelte'
 
   let { query }: { query: ListQuery } = $props()
 
@@ -53,7 +55,9 @@
     reloading = true
     error = null
     try {
-      const response = await listNotes({ view, folder, label, q })
+      // Hidden folders come from settings and the folder tree; showing the
+      // list before both load would flash notes that are about to be hidden.
+      const [response] = await Promise.all([listNotes({ view, folder, label, q }), settingsReady, foldersReady])
       if (gen !== generation) return
       items = response.items
       nextCursor = response.nextCursor
@@ -156,8 +160,20 @@
 
   const currentFolder = $derived(query.folder ? folderById(query.folder) : undefined)
 
-  const pinned = $derived(query.view === 'notes' ? items.filter((n) => n.pinned) : [])
-  const others = $derived(query.view === 'notes' ? items.filter((n) => !n.pinned) : items)
+  // Only the top-level Notes list hides them; the folder's own view, labels
+  // and search still show every note. Filtered here rather than in the query,
+  // so a page can come back mostly hidden and show fewer cards.
+  const hidesFolders = $derived(query.view === 'notes' && !query.folder && !query.label)
+  const hiddenFolderIds = $derived.by(() => {
+    const roots = settings().hiddenFolderIds
+    if (!hidesFolders || roots.length === 0) return new Set<string>()
+    const all = folders()
+    return new Set(all.filter((f) => roots.some((root) => isDescendantOrSelf(all, root, f.id))).map((f) => f.id))
+  })
+  const visible = $derived(hiddenFolderIds.size === 0 ? items : items.filter((n) => n.folderId === null || !hiddenFolderIds.has(n.folderId)))
+
+  const pinned = $derived(query.view === 'notes' ? visible.filter((n) => n.pinned) : [])
+  const others = $derived(query.view === 'notes' ? visible.filter((n) => !n.pinned) : visible)
 
   function emptyMessage(): string {
     switch (query.view) {
@@ -196,8 +212,10 @@
 
   {#if loading}
     <p class="notes-status">{m.notes.loading}</p>
-  {:else if items.length === 0}
-    <p class="notes-status">{emptyMessage()}</p>
+  {:else if visible.length === 0}
+    {#if !nextCursor}
+      <p class="notes-status">{emptyMessage()}</p>
+    {/if}
   {:else if query.view === 'notes'}
     {#if pinned.length > 0}
       <h2 class="notes-heading">{m.notes.pinned}</h2>

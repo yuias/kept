@@ -3,6 +3,7 @@ import { isConcreteFormat } from '../../shared/format'
 import { isTrashRetentionDays } from '../../shared/retention'
 import type { AppSettings, FolderSort } from '../../shared/types'
 import { requireIdentity } from '../auth'
+import { isValidId } from '../id'
 import { ApiException, ownerOf, readJson, type HonoEnv } from '../http'
 import { loadSettings } from '../settings-repo'
 
@@ -12,6 +13,17 @@ const FOLDER_SORTS: readonly FolderSort[] = ['name', 'created', 'updated', 'manu
 
 function isFolderSort(value: unknown): value is FolderSort {
   return typeof value === 'string' && (FOLDER_SORTS as readonly string[]).includes(value)
+}
+
+// Bounds the stored settings row; far above any realistic folder count.
+const HIDDEN_FOLDERS_MAX = 1000
+
+function isHiddenFolderIds(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= HIDDEN_FOLDERS_MAX &&
+    value.every((id) => typeof id === 'string' && isValidId(id))
+  )
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -50,6 +62,12 @@ settingsRoutes.put('/api/settings', requireIdentity, async (c) => {
       throw new ApiException(400, 'bad_request', 'trashRetentionDays must be null or an integer from 1 to 3650')
     }
     next.trashRetentionDays = raw.trashRetentionDays
+  }
+  if ('hiddenFolderIds' in raw) {
+    if (!isHiddenFolderIds(raw.hiddenFolderIds)) {
+      throw new ApiException(400, 'bad_request', `hiddenFolderIds must be an array of up to ${HIDDEN_FOLDERS_MAX} folder ids`)
+    }
+    next.hiddenFolderIds = [...new Set(raw.hiddenFolderIds)]
   }
 
   await c.env.DB.prepare(
