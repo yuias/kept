@@ -1,6 +1,6 @@
 import { getExtensionDependencyFromEditor } from '@lexical/extension'
 import { HistoryExtension } from '@lexical/history'
-import { AutoLinkNode } from '@lexical/link'
+import { KeptAutoLinkNode } from './nodes/link-nodes'
 import {
   $getRoot,
   $isRangeSelection,
@@ -181,7 +181,7 @@ describe('read-only', () => {
 
 describe('auto links', () => {
   const source = 'see https://e.example and `https://c.example`'
-  const links = (core: EditorCore) => core.editor.read(() => $nodesOfType(AutoLinkNode).map((node) => node.getIsUnlinked()))
+  const links = (core: EditorCore) => core.editor.read(() => $nodesOfType(KeptAutoLinkNode).map((node) => node.getIsUnlinked()))
 
   it('links a bare URL and unlinks one inside inline code', () => {
     const { core } = create(source)
@@ -192,7 +192,7 @@ describe('auto links', () => {
     const { core } = create('see https://e.example')
     core.editor.update(
       () => {
-        const link = $nodesOfType(AutoLinkNode)[0]!
+        const link = $nodesOfType(KeptAutoLinkNode)[0]!
         ;(link.getFirstChild() as TextNode).toggleFormat('code')
       },
       { discrete: true },

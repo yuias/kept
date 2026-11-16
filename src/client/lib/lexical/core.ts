@@ -38,6 +38,7 @@ import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
 import { $exportMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
+import { linkNodeReplacements } from './nodes/link-nodes'
 import { createPlaceholderOps } from './placeholders'
 import { $replaceDocument, applyExternalValue, EXTERNAL_TAG } from './sync'
 import { registerTaskShortcut } from './task-shortcut'
@@ -75,6 +76,8 @@ export interface EditorCore extends BodyEditor {
 export const RichEditorExtension = defineExtension({
   name: 'kept/rich-editor',
   theme,
+  // Replacements only here: markdown conversion without a DOM keeps the stock classes.
+  nodes: () => linkNodeReplacements,
   dependencies: [
     MarkdownNodesExtension,
     RichTextExtension,
