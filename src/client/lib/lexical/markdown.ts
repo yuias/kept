@@ -3,6 +3,7 @@ import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
   HIGHLIGHT,
+  LINK,
   setPlainTextEscaper,
   TRANSFORMERS as STOCK_TRANSFORMERS,
   type Transformer,
@@ -21,12 +22,14 @@ import {
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
-import { CODE_SPAN, PARAGRAPH_LINE_START } from './transformers'
+import { CODE_SPAN, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START } from './transformers'
 
 // Highlight (`==x==`) cannot be stored in markdown that GitHub-style readers
 // understand, so it stays plain text.
 export const TRANSFORMERS: Transformer[] = [
-  ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT),
+  ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT).flatMap((transformer) =>
+    transformer === LINK ? [IMAGE, KEPT_LINK] : [transformer],
+  ),
   CODE_SPAN,
   PARAGRAPH_LINE_START,
 ]
@@ -53,9 +56,19 @@ function edge(sibling: LexicalNode | null, last: boolean): Edge {
 // delimiter edges.
 setPlainTextEscaper((text, node) => {
   const own = delimiterOf(node.getFormat())
-  return own
-    ? escapePlainText(text, { delimiter: own }, { delimiter: own })
-    : escapePlainText(text, edge(node.getPreviousSibling(), true), edge(node.getNextSibling(), false))
+  const escaped = own
+    ? escapePlainText(text, { delimiter: own }, { delimiter: own }, true)
+    : escapePlainText(text, edge(node.getPreviousSibling(), true), edge(node.getNextSibling(), false), true)
+  // A `!` right before a link would join it into `![label](url)`. Only an
+  // escape the importer would otherwise read as an image is worth the byte
+  // change: links that IMAGE does not match (`<url>`, parentheses) keep `!`.
+  // The link is tested as the exporter writes it, not as its raw URL.
+  const next = node.getNextSibling()
+  if (!own && $isLinkNode(next) && !$isAutoLinkNode(next) && escaped.endsWith('!')) {
+    const link = KEPT_LINK.export!(next, (parent) => parent.getTextContent(), (_text, content) => content)
+    if (link !== null && IMAGE.importRegExp!.exec(`!${link}`)?.index === 0) return `${escaped.slice(0, -1)}\\!`
+  }
+  return escaped
 })
 
 // shouldPreserveNewLines keeps each source line as its own paragraph, so Enter in
