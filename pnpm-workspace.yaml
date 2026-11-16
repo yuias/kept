@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
   workerd: true
+patchedDependencies:
+  '@lexical/markdown@0.53.0': patches/@lexical__markdown@0.53.0.patch
