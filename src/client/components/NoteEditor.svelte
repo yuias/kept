@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import { type Component, onDestroy, onMount, tick, untrack } from 'svelte'
   import { effectiveFormat } from '../../shared/format'
   import { normalizeLabels, parseLabelInput } from '../../shared/labels'
   import { LABEL_MAX_CHARS, LABELS_PER_NOTE_MAX } from '../../shared/limits'
@@ -16,6 +16,7 @@
   import { formatToCommit, nextFormat, showsDefault } from '../lib/format-toggle'
   import { folderById, folders } from '../lib/folders.svelte'
   import { locale, messages } from '../lib/i18n.svelte'
+  import type { BodyEditor } from '../lib/lexical/core'
   import { insertAt, makePlaceholder, replacePlaceholder } from '../lib/image/insert'
   import { encodeToWebp, importFromUrl, uploadWebp } from '../lib/image/pipeline'
   import { reloadLabels, sameLabelSet } from '../lib/labels.svelte'
@@ -24,7 +25,6 @@
   import FolderPicker from './FolderPicker.svelte'
   import Icon from './Icon.svelte'
   import ImageUrlDialog from './ImageUrlDialog.svelte'
-  import type LiveEditor from './LiveEditor.svelte'
 
   // The parent unmounts this component when `?note` is removed, but never
   // remounts it in place: the only change to `id` this instance ever sees is
@@ -85,10 +85,19 @@
   let saveError = $state<string | null>(null)
 
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
-  // CodeMirror is heavy, so the live editor is fetched only when a note is
+  // The formatted editors are heavy, so one is fetched only when a note is
   // actually shown in formatted mode.
-  let LiveEditorComponent = $state<typeof LiveEditor | null>(null)
-  let liveEl = $state<ReturnType<typeof LiveEditor> | undefined>(undefined)
+  interface FormattedEditorProps {
+    value?: string
+    onchange?: (value: string) => void
+    onpaste?: (event: ClipboardEvent) => void
+    onunsupported?: () => void
+    readonly?: boolean
+    tasksToggleable?: boolean
+    placeholder?: string
+  }
+  let LiveEditorComponent = $state<Component<FormattedEditorProps, BodyEditor, 'value'> | null>(null)
+  let liveEl = $state<BodyEditor | undefined>(undefined)
   let urlDialogOpen = $state(false)
 
   interface ImageTask {
@@ -118,9 +127,20 @@
   let liveLoadFailed = $state(false)
   const showTextarea = $derived(effective === 'syntax' || liveLoadFailed)
 
+  // Temporary switch while the Lexical editor is developed; picked once per instance.
+  const useLexical = (() => {
+    try {
+      return localStorage.getItem('kept.editor') === 'lexical'
+    } catch {
+      // Accessing localStorage throws when site data is blocked.
+      return false
+    }
+  })()
+
   $effect(() => {
     if (effective !== 'formatted' || LiveEditorComponent || liveLoadFailed) return
-    import('./LiveEditor.svelte').then(
+    // Two literal imports, so each editor stays in its own lazily loaded chunk.
+    ;(useLexical ? import('./RichEditor.svelte') : import('./LiveEditor.svelte')).then(
       (mod) => {
         LiveEditorComponent = mod.default
       },
