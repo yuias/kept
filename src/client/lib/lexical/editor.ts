@@ -13,11 +13,13 @@ import {
   type NodeKey,
 } from 'lexical'
 import { mount, unmount } from 'svelte'
+import BlockHandle from '../../components/editor/BlockHandle.svelte'
 import EmojiMenu, { type EmojiMenuState } from '../../components/editor/EmojiMenu.svelte'
 import FormatBar from '../../components/editor/FormatBar.svelte'
 import PasteChoice from '../../components/editor/PasteChoice.svelte'
 import TableActions, { type TableAction } from '../../components/editor/TableActions.svelte'
 import { linkHref } from '../link-href'
+import { blockIndexAt, canMoveBlock, type DropPoint, dropPointAt, moveBlock, rootBlockBoxes } from './blocks'
 import { createCardOps } from './cards'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { mountDecorators } from './decorators'
@@ -41,6 +43,9 @@ const TABLE_BUTTON_GAP = 2
 // Space between the shortcode and the emoji menu, and the number of suggestions it lists.
 const EMOJI_GAP = 2
 const EMOJI_LIMIT = 8
+
+// Space between the editor's left edge and the block handle.
+const HANDLE_INSET = 2
 
 const TABLE_ACTIONS: Record<TableAction, typeof insertRowBelow> = {
   insertRow: insertRowBelow,
@@ -511,6 +516,133 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   window.addEventListener('resize', placeEmoji)
   window.visualViewport?.addEventListener('resize', placeEmoji)
 
+  // The block handle sits in the left gutter at the top of the block under the pointer. It is
+  // mounted at the first hover and then only hidden, so moving along the blocks does not remount
+  // it. Phones and other coarse pointers never get it.
+  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)')
+  let blockHandle: { host: HTMLElement; component: Record<string, unknown> } | null = null
+  let hoveredBlock: NodeKey | null = null
+  // A pointer press in the text may start a selection drag; the handle stays out of its way.
+  let selecting = false
+  let dragging = false
+  let cancelDrag: (() => void) | null = null
+  const handleAllowed = (): boolean => finePointer.matches && core.editor.isEditable() && !core.gate.active && !selecting && !fieldInEditor()
+  const hideHandle = (): void => {
+    hoveredBlock = null
+    if (blockHandle) blockHandle.host.hidden = true
+  }
+  const placeHandle = (): void => {
+    const element = hoveredBlock === null ? null : core.editor.getElementByKey(hoveredBlock)
+    if (!element || !handleAllowed()) return hideHandle()
+    if (!blockHandle) {
+      const host = document.createElement('div')
+      host.style.position = 'absolute'
+      host.style.zIndex = '5'
+      wrapper.append(host)
+      blockHandle = { host, component: mount(BlockHandle, { target: host, props: { onpointerdown: startDrag } }) }
+    }
+    const box = element.getBoundingClientRect()
+    const area = root.getBoundingClientRect()
+    const frame = wrapper.getBoundingClientRect()
+    blockHandle.host.hidden = box.bottom < area.top || box.top > area.bottom
+    blockHandle.host.style.top = `${Math.max(box.top, area.top) - frame.top}px`
+    blockHandle.host.style.left = `${area.left - frame.left + HANDLE_INSET}px`
+  }
+  const onHandlePointerMove = (event: PointerEvent): void => {
+    if (dragging) return
+    const area = root.getBoundingClientRect()
+    const boxes = handleAllowed() && event.clientY >= area.top && event.clientY <= area.bottom ? rootBlockBoxes(core.editor) : []
+    const index = blockIndexAt(boxes, event.clientY)
+    const box = boxes[index]
+    // Blank lines are no blocks, and the space below the last block belongs to no block.
+    if (!box || box.blank || (index === boxes.length - 1 && event.clientY > box.bottom)) return hideHandle()
+    hoveredBlock = box.key
+    placeHandle()
+  }
+  const onHandlePointerLeave = (): void => {
+    if (!dragging) hideHandle()
+  }
+  const onSelectionPress = (event: PointerEvent): void => {
+    if (event.button !== 0) return
+    selecting = true
+    hideHandle()
+  }
+  const onPressEnd = (): void => {
+    selecting = false
+  }
+
+  // Dragging: the handle captures the pointer, a line shows the gap the block would go to, and
+  // the move happens on release. Esc cancels; it is taken in the capture phase because Lexical
+  // would blur the editor and the note's dialog would close otherwise.
+  function startDrag(event: PointerEvent): void {
+    const key = hoveredBlock
+    if (event.button !== 0 || key === null || dragging || !handleAllowed()) return
+    const button = event.currentTarget as HTMLElement
+    event.preventDefault()
+    // Before the capture: the boundary events it fires would hide the handle, which ends the capture.
+    dragging = true
+    button.setPointerCapture(event.pointerId)
+    const element = core.editor.getElementByKey(key)
+    element?.classList.add('rich-dragging')
+    const line = document.createElement('div')
+    line.className = 'rich-drop-line'
+    line.hidden = true
+    wrapper.append(line)
+    let drop: DropPoint | null = null
+    const onMove = (move: PointerEvent): void => {
+      drop = dropPointAt(rootBlockBoxes(core.editor), move.clientY)
+      // A drop that would leave the block where it is shows no line.
+      if (drop && !canMoveBlock(core.editor, key, drop.key, drop.side)) drop = null
+      line.hidden = drop === null
+      if (!drop) return
+      const area = root.getBoundingClientRect()
+      const frame = wrapper.getBoundingClientRect()
+      const style = getComputedStyle(root)
+      const left = parseFloat(style.paddingLeft)
+      line.style.top = `${drop.line - frame.top}px`
+      line.style.left = `${area.left - frame.left + left}px`
+      line.style.width = `${root.clientWidth - left - parseFloat(style.paddingRight)}px`
+    }
+    const finish = (apply: boolean): void => {
+      button.removeEventListener('pointermove', onMove)
+      button.removeEventListener('pointerup', onUp)
+      button.removeEventListener('pointercancel', onCancel)
+      document.removeEventListener('keydown', onEscape, true)
+      if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
+      line.remove()
+      element?.classList.remove('rich-dragging')
+      dragging = false
+      cancelDrag = null
+      const target = drop
+      hideHandle()
+      if (apply && target) moveBlock(core.editor, core.gate, key, target.key, target.side)
+    }
+    const onUp = (): void => finish(true)
+    const onCancel = (): void => finish(false)
+    const onEscape = (press: KeyboardEvent): void => {
+      if (press.key !== 'Escape') return
+      press.preventDefault()
+      press.stopPropagation()
+      finish(false)
+    }
+    button.addEventListener('pointermove', onMove)
+    button.addEventListener('pointerup', onUp)
+    button.addEventListener('pointercancel', onCancel)
+    document.addEventListener('keydown', onEscape, true)
+    cancelDrag = onCancel
+  }
+  const stopHandleUpdates = core.editor.registerUpdateListener(placeHandle)
+  const stopHandleEditable = core.editor.registerEditableListener(placeHandle)
+  wrapper.addEventListener('pointermove', onHandlePointerMove)
+  wrapper.addEventListener('pointerleave', onHandlePointerLeave)
+  root.addEventListener('pointerdown', onSelectionPress, true)
+  document.addEventListener('pointerup', onPressEnd, true)
+  document.addEventListener('pointercancel', onPressEnd, true)
+  root.addEventListener('focusin', placeHandle)
+  root.addEventListener('compositionstart', placeHandle)
+  root.addEventListener('scroll', placeHandle)
+  window.addEventListener('resize', placeHandle)
+
   return {
     insertText: (s) => core.insertText(s),
     replaceText: (token, s) => core.replaceText(token, s),
@@ -558,6 +690,23 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       root.removeEventListener('scroll', placeEmoji)
       window.removeEventListener('resize', placeEmoji)
       window.visualViewport?.removeEventListener('resize', placeEmoji)
+      cancelDrag?.()
+      stopHandleUpdates()
+      stopHandleEditable()
+      if (blockHandle) {
+        void unmount(blockHandle.component)
+        blockHandle.host.remove()
+        blockHandle = null
+      }
+      wrapper.removeEventListener('pointermove', onHandlePointerMove)
+      wrapper.removeEventListener('pointerleave', onHandlePointerLeave)
+      root.removeEventListener('pointerdown', onSelectionPress, true)
+      document.removeEventListener('pointerup', onPressEnd, true)
+      document.removeEventListener('pointercancel', onPressEnd, true)
+      root.removeEventListener('focusin', placeHandle)
+      root.removeEventListener('compositionstart', placeHandle)
+      root.removeEventListener('scroll', placeHandle)
+      window.removeEventListener('resize', placeHandle)
       stopEditable()
       stopDecorators()
       root.removeEventListener('compositionstart', begin)

@@ -11,6 +11,14 @@
   flex: 1;
   min-width: 0;
   position: relative;
+  /* Room for the block handle; only a hovering fine pointer gets one. */
+  --rich-gutter: 0px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rich-editor-wrap {
+    --rich-gutter: 24px;
+  }
 }
 
 .rich-editor {
@@ -19,7 +27,7 @@
   min-height: 40vh;
   max-height: 60vh;
   overflow: auto;
-  padding: 4px 2px;
+  padding: 4px 2px 4px calc(2px + var(--rich-gutter));
   outline: none;
   color: var(--text);
   caret-color: var(--text);
@@ -33,8 +41,23 @@
 .rich-editor-placeholder {
   position: absolute;
   top: 4px;
-  left: 2px;
+  left: calc(2px + var(--rich-gutter));
   color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* The block being dragged, and the line where it would land. */
+.rich-dragging {
+  opacity: 0.4;
+}
+
+.rich-drop-line {
+  position: absolute;
+  z-index: 5;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--accent);
   pointer-events: none;
 }
 

@@ -163,6 +163,7 @@ export const ja: Messages = {
     tableDeleteRow: '行を削除',
     tableDeleteColumn: '列を削除',
     emojiSuggestions: '絵文字の候補',
+    blockHandle: 'ドラッグしてブロックを移動',
   },
   imageUrlDialog: {
     title: 'URLから画像を挿入',

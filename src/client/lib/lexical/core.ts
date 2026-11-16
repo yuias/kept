@@ -33,6 +33,7 @@ import {
   type LexicalEditorWithDispose,
   type UpdateListener,
 } from 'lexical'
+import { registerBlockKeys } from './blocks'
 import { CompositionGate } from './composition'
 import { registerEmojiShortcut } from './emoji'
 import { classifyRoundTrip } from './fidelity'
@@ -226,6 +227,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
   const urlPaste = createUrlPaste(editor, gate)
   const unregister = [
     registerMarkdownChanges(editor, transformers, state, options.onChange),
+    registerBlockKeys(editor, gate),
     // Before Lexical's own paste handling: the app takes image files itself and
     // prevents the default, which stops Lexical from pasting the clipboard text too.
     editor.registerCommand(
