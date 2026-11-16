@@ -163,7 +163,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@lexical/markdown@0.53.0': ac8648710de6461b6591bb5c557d6115265e863c00f474147e6fc7f4a9ad85f1
+  '@lexical/markdown@0.53.0': 38518da0c16f8ea52e10a08a70160509ca1af9ac115bedd53c1b8ecb7a20192c
 
 importers:
 
@@ -204,7 +204,7 @@ importers:
         version: 0.53.0(typescript@6.0.3)
       '@lexical/markdown':
         specifier: 0.53.0
-        version: 0.53.0(patch_hash=ac8648710de6461b6591bb5c557d6115265e863c00f474147e6fc7f4a9ad85f1)(typescript@6.0.3)
+        version: 0.53.0(patch_hash=38518da0c16f8ea52e10a08a70160509ca1af9ac115bedd53c1b8ecb7a20192c)(typescript@6.0.3)
       '@lexical/rich-text':
         specifier: 0.53.0
         version: 0.53.0(typescript@6.0.3)
@@ -2218,7 +2218,7 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
-  '@lexical/markdown@0.53.0(patch_hash=ac8648710de6461b6591bb5c557d6115265e863c00f474147e6fc7f4a9ad85f1)(typescript@6.0.3)':
+  '@lexical/markdown@0.53.0(patch_hash=38518da0c16f8ea52e10a08a70160509ca1af9ac115bedd53c1b8ecb7a20192c)(typescript@6.0.3)':
     dependencies:
       '@lexical/code-core': 0.53.0(typescript@6.0.3)
       '@lexical/internal': 0.53.0(typescript@6.0.3)

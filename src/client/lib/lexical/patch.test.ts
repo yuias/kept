@@ -1,7 +1,7 @@
 import { $convertToMarkdownString, setPlainTextEscaper } from '@lexical/markdown'
-import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical'
+import { $createParagraphNode, $createTextNode, $getRoot, $isTextNode, IS_BOLD, type ParagraphNode } from 'lexical'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createMarkdownEditor } from './markdown'
+import { $importMarkdown, createMarkdownEditor, roundTrip } from './markdown'
 
 // Exports one paragraph with a plain and an inline-code text node, preserving new lines.
 function exportParagraph(): string {
@@ -35,5 +35,21 @@ describe('plain-text escaper hook of the patched @lexical/markdown', () => {
     setPlainTextEscaper((text) => `<${text}>`)
     setPlainTextEscaper(null)
     expect(exportParagraph()).toBe('a\\_b`c_d`')
+  })
+})
+
+describe('emphasis flanking of the patched importer', () => {
+  // `、` and `"` are punctuation to CommonMark, so `**` between them opens and closes bold.
+  it.each([
+    ['a、**"b"** c', ['a、', '"b"', ' c']],
+    ['「**"b"**」', ['「', '"b"', '」']],
+  ])('reads %j with a non-ASCII punctuation neighbour as bold', (source, texts) => {
+    const editor = createMarkdownEditor()
+    editor.update(() => $importMarkdown(source), { discrete: true })
+    const nodes = editor.read(() => ($getRoot().getFirstChild() as ParagraphNode).getChildren().filter($isTextNode).map((node): [string, number] => [node.getTextContent(), node.getFormat()]))
+    editor.dispose()
+    expect(nodes.map(([text]) => text)).toEqual(texts)
+    expect(nodes.filter(([, format]) => format === IS_BOLD)).toHaveLength(1)
+    expect(roundTrip(source)).toBe(source)
   })
 })

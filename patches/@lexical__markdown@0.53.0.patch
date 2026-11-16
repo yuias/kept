@@ -1,7 +1,16 @@
 diff --git a/dist/LexicalMarkdown.dev.js b/dist/LexicalMarkdown.dev.js
-index 61233b06eb10b421efaa99675fa2b42aaf16a43e..4e5f17f8e6306b4de910f8da0588135ade0cf0db 100644
+index 61233b06eb10b421efaa99675fa2b42aaf16a43e..f1427baf99faa1755ef1e51d0c19706820ae5777 100644
 --- a/dist/LexicalMarkdown.dev.js
 +++ b/dist/LexicalMarkdown.dev.js
+@@ -47,7 +47,7 @@ function transformersByType(transformers) {
+ }
+ const PUNCTUATION_OR_SPACE = /[!-/:-@[-`{-~\s]/;
+ const WHITESPACE = /\s/;
+-const PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~]/;
++const PUNCTUATION = /[\p{P}\p{S}]/u;
+ const MARKDOWN_EMPTY_LINE_REG_EXP = /^\s{0,3}$/;
+ function isEmptyParagraph(node) {
+   if (!$isParagraphNode(node)) {
 @@ -1634,6 +1634,11 @@ function $exportChildren(node, textTransformersIndex, textMatchTransformers, unc
  function $exportLineBreak(node) {
    return $getState(node, hardLineBreakState) + '\n';
@@ -103,3 +112,16 @@ index c11fbcd0b746c42ec529c1014433016dd0694eed..25c8315c3c9b7aee0f8735e244fce8c4
 + */
 +declare function setPlainTextEscaper(fn: ((text: string, node: TextNode) => string) | null): void;
 +export { $convertFromMarkdownString, $convertSelectionToMarkdownString, $convertToMarkdownString, $generateNodesFromMarkdownString, BOLD_ITALIC_STAR, BOLD_ITALIC_UNDERSCORE, BOLD_STAR, BOLD_UNDERSCORE, CHECK_LIST, CODE, ELEMENT_TRANSFORMERS, type ElementTransformer, HEADING, HIGHLIGHT, INLINE_CODE, isTableRowDivider, ITALIC_STAR, ITALIC_UNDERSCORE, LINK, MULTILINE_ELEMENT_TRANSFORMERS, type MultilineElementTransformer, ORDERED_LIST, QUOTE, registerMarkdownShortcuts, setPlainTextEscaper, STRIKETHROUGH, TEXT_FORMAT_TRANSFORMERS, TEXT_MATCH_TRANSFORMERS, type TextFormatTransformer, type TextMatchTransformer, type Transformer, TRANSFORMERS, UNORDERED_LIST, };
+diff --git a/src/utils.ts b/src/utils.ts
+index 200b5c10b569663147e7224ec8075749b0616d12..9a044821030abacd67f748e16d198cd96533bdf6 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -58,7 +58,7 @@ export function transformersByType(transformers: Transformer[]): Readonly<{
+ 
+ export const PUNCTUATION_OR_SPACE = /[!-/:-@[-`{-~\s]/;
+ export const WHITESPACE = /\s/;
+-export const PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~]/;
++export const PUNCTUATION = /[\p{P}\p{S}]/u;
+ 
+ const MARKDOWN_EMPTY_LINE_REG_EXP = /^\s{0,3}$/;
+ 
