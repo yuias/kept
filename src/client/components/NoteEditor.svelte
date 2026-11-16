@@ -85,9 +85,9 @@
   let saveError = $state<string | null>(null)
 
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
-  // The formatted editors are heavy, so one is fetched only when a note is
-  // actually shown in formatted mode.
-  interface FormattedEditorProps {
+  // The rich editor is heavy, so it is fetched only when a note is actually
+  // shown in formatted mode.
+  interface RichEditorProps {
     value?: string
     onchange?: (value: string) => void
     onpaste?: (event: ClipboardEvent) => void
@@ -96,7 +96,7 @@
     tasksToggleable?: boolean
     placeholder?: string
   }
-  let LiveEditorComponent = $state<Component<FormattedEditorProps, BodyEditor, 'value'> | null>(null)
+  let RichEditorComponent = $state<Component<RichEditorProps, BodyEditor, 'value'> | null>(null)
   let liveEl = $state<BodyEditor | undefined>(undefined)
   let urlDialogOpen = $state(false)
 
@@ -130,22 +130,11 @@
   let richUnsupported = $state(false)
   const showTextarea = $derived(effective === 'syntax' || liveLoadFailed || richUnsupported)
 
-  // Temporary switch while the Lexical editor is developed; picked once per instance.
-  const useLexical = (() => {
-    try {
-      return localStorage.getItem('kept.editor') === 'lexical'
-    } catch {
-      // Accessing localStorage throws when site data is blocked.
-      return false
-    }
-  })()
-
   $effect(() => {
-    if (effective !== 'formatted' || LiveEditorComponent || liveLoadFailed) return
-    // Two literal imports, so each editor stays in its own lazily loaded chunk.
-    ;(useLexical ? import('./RichEditor.svelte') : import('./LiveEditor.svelte')).then(
+    if (effective !== 'formatted' || RichEditorComponent || liveLoadFailed) return
+    import('./RichEditor.svelte').then(
       (mod) => {
-        LiveEditorComponent = mod.default
+        RichEditorComponent = mod.default
       },
       () => {
         liveLoadFailed = true
@@ -741,7 +730,7 @@
   }
 </script>
 
-<!-- Composition events bubble from every field, the live editor included;
+<!-- Composition events bubble from every field, the rich editor included;
      an unconfirmed IME conversion must not reach the server. -->
 <dialog
   bind:this={dialogEl}
@@ -814,8 +803,8 @@
       {#if richUnsupported && effective === 'formatted'}
         <p class="note-editor-status">{m.editor.formattedUnavailable}</p>
       {/if}
-    {:else if LiveEditorComponent}
-      <LiveEditorComponent
+    {:else if RichEditorComponent}
+      <RichEditorComponent
         bind:this={liveEl}
         bind:value={body}
         onchange={onBodyInput}
@@ -1083,17 +1072,6 @@
 
     .note-editor-toolbar {
       flex-wrap: wrap;
-    }
-
-    /* liveTheme (lib/live/decorations.ts) pins the editor to 40vh-60vh; this selector out-ranks its single generated class. */
-    .note-editor :global(.live-editor) {
-      min-height: 0;
-    }
-
-    .note-editor :global(.live-editor .cm-editor) {
-      flex: 1;
-      min-height: 0;
-      max-height: none;
     }
   }
 
