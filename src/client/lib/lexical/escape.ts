@@ -3,6 +3,8 @@
 // every backslash + ASCII punctuation and numeric character references) would
 // otherwise take for markup, so ordinary text stays as typed.
 
+import { parseCardLine } from '../../../shared/link-card'
+
 const ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/
 
 const lastChar = (s: string): string => /.$/su.exec(s)?.[0] ?? ''
@@ -129,7 +131,7 @@ export interface LineStartBlocks {
 
 /**
  * Escapes a line that would read as a block when it starts a paragraph: ATX
- * heading, quote, list item, fence, table row or thematic break. The last two
+ * heading, quote, list item, fence, card line, table row or thematic break. The last two
  * only count while the importer turns them into blocks (`blocks`); before
  * that, such a line is an ordinary paragraph and must keep its bytes. The
  * importer reads `\s` after a marker (tab and U+3000 included) and any number
@@ -150,5 +152,7 @@ export function escapeLineStart(
   // The importer opens a code block on any line that starts with three backticks.
   const fenceIndent = /^[ \t]*(?:`{3,}|~{3,})/.test(line) ? /^[ \t]*/.exec(line)![0].length : -1
   if (fenceIndent >= 0) return insertAt(fenceIndent)
+  // `@` + a link typed in the editor writes a card line, which the importer turns into a card.
+  if (parseCardLine(line) !== null) return insertAt(0)
   return blocks.thematicBreak && THEMATIC_BREAK.test(line) ? insertAt(indent) : line
 }

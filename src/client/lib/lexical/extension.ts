@@ -5,6 +5,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { TableCellNode, TableNode, TableRowNode } from '@lexical/table'
 import { HorizontalRuleNode } from '@lexical/extension'
 import { defineExtension } from 'lexical'
+import { CardNode } from './nodes/card-node'
 import { ImageNode } from './nodes/image-node'
 
 /** Node classes the markdown conversion needs; no DOM or React dependency, so it also runs headless. */
@@ -23,5 +24,6 @@ export const MarkdownNodesExtension = defineExtension({
     TableRowNode,
     TableCellNode,
     ImageNode,
+    CardNode,
   ],
 })

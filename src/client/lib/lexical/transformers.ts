@@ -1,7 +1,9 @@
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
 import { LINK, type ElementTransformer, type TextMatchTransformer } from '@lexical/markdown'
-import { $isParagraphNode, $isTextNode, IS_CODE, ParagraphNode } from 'lexical'
+import { $isParagraphNode, $isRootNode, $isTextNode, IS_CODE, ParagraphNode } from 'lexical'
+import { CARD_LINE_PATTERN, cardMarkup, parseCardLine } from '../../../shared/link-card'
 import { escapeLineStart, type LineStartBlocks } from './escape'
+import { $createCardNode, $isCardNode, CardNode } from './nodes/card-node'
 import { $createImageNode, $isImageNode, ImageNode } from './nodes/image-node'
 
 // Thematic breaks and table rows are plain paragraphs until the RULE and TABLE
@@ -120,4 +122,30 @@ export const KEPT_LINK: TextMatchTransformer = {
     const stockUrl = url.replace(/([()])/g, '\\$1')
     return stock.startsWith(head + stockUrl) ? head + url + stock.slice(head.length + stockUrl.length) : stock
   },
+}
+
+/**
+ * A line that is only `@[card](url)` with an http(s) url, at the root, becomes a
+ * card (the rule is the app's own `parseCardLine`). Any other line stays text.
+ * Trailing spaces are not kept.
+ */
+export const CARD: ElementTransformer = {
+  dependencies: [CardNode],
+  export: (node) => ($isCardNode(node) ? cardMarkup(node.getURL()) : null),
+  regExp: CARD_LINE_PATTERN,
+  replace: (parentNode, children, match, isImport) => {
+    const url = parseCardLine(match[0]!)
+    if (url !== null && $isRootNode(parentNode.getParent())) {
+      parentNode.replace($createCardNode(url))
+      return
+    }
+    // The importer has already cut the matched prefix off the line's text node;
+    // put the whole line back so that the text transformers see the original.
+    // The shortcut path hands over the nodes after the caret, which stay as they are.
+    // `match` is a RegExpMatchArray on import, although the type says string[].
+    const line = children[0]
+    if (isImport && $isTextNode(line)) line.setTextContent((match as RegExpMatchArray).input!)
+    return false
+  },
+  type: 'element',
 }

@@ -22,7 +22,7 @@ import {
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
-import { CODE_SPAN, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START } from './transformers'
+import { CARD, CODE_SPAN, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START } from './transformers'
 
 // Highlight (`==x==`) cannot be stored in markdown that GitHub-style readers
 // understand, so it stays plain text.
@@ -30,6 +30,7 @@ export const TRANSFORMERS: Transformer[] = [
   ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT).flatMap((transformer) =>
     transformer === LINK ? [IMAGE, KEPT_LINK] : [transformer],
   ),
+  CARD,
   CODE_SPAN,
   PARAGRAPH_LINE_START,
 ]
