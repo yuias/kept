@@ -33,7 +33,7 @@ const DELIMITER_CELL = /^:?-+:?$/
  * Splits a row that starts with `|` into trimmed cells. A backslash protects the
  * next character, so `\|` stays inside its cell (and is still escaped in the
  * result). A trailing `|` closes the last cell instead of opening another one,
- * and a lone `|` has no cells, as in the CodeMirror table model.
+ * and a lone `|` has no cells.
  */
 function splitRow(line: string): string[] {
   const cells: string[] = []
@@ -74,8 +74,7 @@ export function isTableStart(header: string, delimiter: string | undefined): boo
 
 /**
  * The header row of an imported table was empty and body rows follow, so every
- * row is a body row and the export writes the empty header row back. The
- * CodeMirror table model draws such a table the same way (`headerless`).
+ * row is a body row and the export writes the empty header row back.
  */
 export const tableHeaderlessState = createState('keptTableHeaderless', { parse: (value) => value === true })
 
@@ -99,7 +98,7 @@ const BREAK = /<br\s*\/?>/i
  * escaped it: the importer unescapes `\<br>` into the same text, so the `<` of
  * an escaped one goes through the importer as a punctuation character (one that
  * the cell does not contain) and is turned back into `<` after the split. A
- * code span keeps `<br>` as text, as in the CodeMirror table model.
+ * code span keeps `<br>` as text.
  */
 function $readCell(text: string, inline: Transformer[]): ElementNode {
   // A punctuation character, so that emphasis next to it is read as it is next to `<`.

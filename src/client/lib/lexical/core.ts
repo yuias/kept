@@ -214,7 +214,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
   }
   record(options.value)
 
-  // Empty means the export is '', as with CodeMirror's placeholder; it follows `baseline`,
+  // Empty means the export is '', so the placeholder shows; it follows `baseline`,
   // which every content update and `setValue` keeps current.
   let empty: boolean | null = null
   const syncEmpty = (): void => {

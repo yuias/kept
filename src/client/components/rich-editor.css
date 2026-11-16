@@ -1,7 +1,6 @@
 /*
- * Styles of the Lexical editor. They follow GitHub's markdown rendering, as the
- * CodeMirror editor does. Colours come from the app palette variables, so light
- * and dark need no separate rules. The class names are set in
+ * Styles of the Lexical editor. They follow GitHub's markdown rendering. Colours come from
+ * the app palette variables, so light and dark need no separate rules. The class names are set in
  * `lib/lexical/theme.ts`. The phone layout switches at 720px; see the list of
  * places that repeat the number in `app.css`.
  */
@@ -354,7 +353,7 @@
  * Lists draw their own marks: one box per mark, wide enough for `1.` and
  * right-aligned, so the text starts at the same place after a bullet or a
  * number. A level steps in by the box plus the gap after it (2em); the text
- * sits a space further right, as it does in the CodeMirror editor.
+ * sits a space further right.
  */
 .rich-ul,
 .rich-ol {

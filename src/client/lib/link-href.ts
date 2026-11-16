@@ -16,7 +16,7 @@ function parses(text: string): URL | null {
  */
 export function linkHref(raw: string): string | null {
   let text = raw.trim()
-  // Lezer keeps the angle brackets of `[a](<b c>)` in the URL node.
+  // The target of `[a](<b c>)` is written in angle brackets, which are not part of the URL.
   if (text.startsWith('<') && text.endsWith('>')) text = text.slice(1, -1).trim()
   if (text === '') return null
 

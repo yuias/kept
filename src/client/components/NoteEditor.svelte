@@ -97,7 +97,7 @@
     placeholder?: string
   }
   let RichEditorComponent = $state<Component<RichEditorProps, BodyEditor, 'value'> | null>(null)
-  let liveEl = $state<BodyEditor | undefined>(undefined)
+  let bodyEditorEl = $state<BodyEditor | undefined>(undefined)
   let urlDialogOpen = $state(false)
 
   interface ImageTask {
@@ -124,20 +124,20 @@
 
   // A failed chunk load (offline, stale deploy) falls back to the plain
   // textarea so the note stays editable.
-  let liveLoadFailed = $state(false)
+  let richLoadFailed = $state(false)
   // Set when the formatted editor reports a note it cannot round-trip; the
   // textarea shows the stored text and nothing is saved unless the user edits it.
   let richUnsupported = $state(false)
-  const showTextarea = $derived(effective === 'syntax' || liveLoadFailed || richUnsupported)
+  const showTextarea = $derived(effective === 'syntax' || richLoadFailed || richUnsupported)
 
   $effect(() => {
-    if (effective !== 'formatted' || RichEditorComponent || liveLoadFailed) return
+    if (effective !== 'formatted' || RichEditorComponent || richLoadFailed) return
     import('./RichEditor.svelte').then(
       (mod) => {
         RichEditorComponent = mod.default
       },
       () => {
-        liveLoadFailed = true
+        richLoadFailed = true
       },
     )
   })
@@ -437,13 +437,13 @@
       try {
         const result = await work()
         const markdown = `![](${result.url})`
-        if (!liveEl?.replaceText(token, markdown)) {
+        if (!bodyEditorEl?.replaceText(token, markdown)) {
           const at = body.indexOf(token)
           if (at !== -1) await mutateBody(replacePlaceholder(body, token, markdown), at, markdown.length - token.length)
         }
         resolveImageTask(token)
       } catch (cause) {
-        if (!liveEl?.replaceText(token, '')) {
+        if (!bodyEditorEl?.replaceText(token, '')) {
           const at = body.indexOf(token)
           if (at !== -1) await mutateBody(replacePlaceholder(body, token, ''), at, -token.length)
         }
@@ -465,8 +465,8 @@
 
   async function insertImagePlaceholder(pos: number): Promise<string> {
     const token = makePlaceholder()
-    if (liveEl) {
-      liveEl.insertText(token)
+    if (bodyEditorEl) {
+      bodyEditorEl.insertText(token)
       addImageTask(token)
       return token
     }
@@ -805,7 +805,7 @@
       {/if}
     {:else if RichEditorComponent}
       <RichEditorComponent
-        bind:this={liveEl}
+        bind:this={bodyEditorEl}
         bind:value={body}
         onchange={onBodyInput}
         onpaste={handlePaste}
