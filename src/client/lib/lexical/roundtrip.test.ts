@@ -32,7 +32,6 @@ const normalizeOut = load(
 const KNOWN_LOSSY = new Set<string>([
   'list-code',
   'tables',
-  'bullets-star',
   'table-padding',
 ])
 
