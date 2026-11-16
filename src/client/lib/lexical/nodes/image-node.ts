@@ -114,8 +114,25 @@ export class ImageNode extends DecoratorNode<ImageDecoration> {
   }
 }
 
+// The importer ends the alt at the first `]` (a backslash does not escape it) and
+// ends the target at whitespace or an unescaped parenthesis, so a node that holds
+// any of them would export markup that reads back as something else. Markdown
+// that the importer accepts never holds them, so imported nodes pass unchanged.
+/** The alt without `]` or line breaks, which cannot be written inside `![...]`. */
+export const sanitizeImageAlt = (alt: string): string => alt.replace(/\]/g, '').replace(/[\r\n]+/g, ' ')
+
+/**
+ * The target with whitespace and bare parentheses percent-encoded, and a leading
+ * `<` (which would start `<url>`). A backslash escape such as `\(` is kept: the
+ * importer accepts it and keeps it in the node.
+ */
+export const sanitizeImageSrc = (src: string): string =>
+  src
+    .replace(/\\\S|[\s()]/g, (part) => (part.startsWith('\\') ? part : part === '(' ? '%28' : part === ')' ? '%29' : encodeURIComponent(part)))
+    .replace(/^</, '%3C')
+
 export function $createImageNode(src: string, alt: string, title: string | null = null): ImageNode {
-  return $create(ImageNode).setSrc(src).setAlt(alt).setTitle(title)
+  return $create(ImageNode).setSrc(sanitizeImageSrc(src)).setAlt(sanitizeImageAlt(alt)).setTitle(title)
 }
 
 export function $isImageNode(node: unknown): node is ImageNode {

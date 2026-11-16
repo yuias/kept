@@ -27,6 +27,7 @@ import {
   HISTORY_MERGE_TAG,
   INSERT_LINE_BREAK_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
+  PASTE_COMMAND,
   TextNode,
   type LexicalEditor,
   type LexicalEditorWithDispose,
@@ -37,6 +38,7 @@ import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
 import { $exportMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
+import { createPlaceholderOps } from './placeholders'
 import { $replaceDocument, applyExternalValue, EXTERNAL_TAG } from './sync'
 import { registerTaskShortcut } from './task-shortcut'
 import { theme } from './theme'
@@ -215,6 +217,18 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
   syncEmpty()
   const unregister = [
     registerMarkdownChanges(editor, transformers, state, options.onChange),
+    // Before Lexical's own paste handling: the app takes image files itself and
+    // prevents the default, which stops Lexical from pasting the clipboard text too.
+    editor.registerCommand(
+      PASTE_COMMAND,
+      (event) => {
+        // Lexical also dispatches this for an `insertFromPaste` input event, which has no
+        // `clipboardData`; the callback only reads it, so it sees no files then.
+        options.onPaste(event as ClipboardEvent)
+        return event.defaultPrevented
+      },
+      COMMAND_PRIORITY_HIGH,
+    ),
     // After the change listener, so `baseline` is already current.
     editor.registerUpdateListener(({ tags }) => {
       if (!tags.has(EXTERNAL_TAG)) syncEmpty()
@@ -222,6 +236,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
   ]
 
   const gate = new CompositionGate(editor)
+  const placeholders = createPlaceholderOps(editor, gate, transformers)
 
   return {
     editor,
@@ -240,15 +255,21 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
     setReadOnly(readOnly) {
       editor.setEditable(!readOnly)
     },
-    insertText() {},
-    replaceText: () => false,
+    insertText: placeholders.insertText,
+    replaceText: placeholders.replaceText,
     focus() {
       editor.focus()
     },
     destroy() {
-      for (const off of unregister) off()
-      gate.dispose()
-      editor.dispose()
+      try {
+        // A replacement that waited out a composition must still reach `onChange`: the
+        // note is saved from what the editor emitted, and the placeholder would stay in it.
+        placeholders.flush()
+      } finally {
+        for (const off of unregister) off()
+        gate.dispose()
+        editor.dispose()
+      }
     },
   }
 }

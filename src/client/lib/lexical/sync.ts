@@ -115,6 +115,12 @@ export interface ExternalValueOptions {
   onReplaced: (markdown: string) => void
 }
 
+/** True when the editor has a root that does not hold the focus; updates then must not pull it in. */
+export function isBlurred(editor: LexicalEditor): boolean {
+  const root = editor.getRootElement()
+  return root !== null && typeof document !== 'undefined' && !root.contains(document.activeElement)
+}
+
 /**
  * Makes the document `markdown` unless it already exports to exactly that. The
  * replace runs through the composition gate, tagged so that no change event or
@@ -126,9 +132,8 @@ export function applyExternalValue(editor: LexicalEditor, gate: CompositionGate,
   gate.run(() => {
     if (options.edits() !== edits) return
     if (editor.read(() => $exportMarkdown(options.transformers, options.seams())) === markdown) return
-    const root = editor.getRootElement()
     // Restoring the caret must not pull focus into an editor the user has left.
-    const blurred = root !== null && typeof document !== 'undefined' && !root.contains(document.activeElement)
+    const blurred = isBlurred(editor)
     editor.update(
       () => {
         $replaceDocument(markdown, options.transformers)
