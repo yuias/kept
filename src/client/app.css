@@ -49,8 +49,8 @@ a {
 
 /* The phone layout switches at 720px. The number is repeated (CSS cannot read
    the TS constant) in: COMPACT_MAX_WIDTH_PX in lib/sidebar-model.ts, this file,
-   components/SearchBox.svelte, components/NoteEditor.svelte and
-   routes/NotesView.svelte. Change them together. */
+   components/SearchBox.svelte, components/NoteEditor.svelte,
+   components/rich-editor.css and routes/NotesView.svelte. Change them together. */
 .app {
   min-height: 100vh;
   min-height: 100dvh;

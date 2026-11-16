@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { createRichEditor, type RichEditorHandle } from '../lib/lexical/editor'
+  import './rich-editor.css'
 
   let {
     value = $bindable(''),
@@ -82,29 +83,3 @@
     <div class="rich-editor-placeholder" aria-hidden="true">{placeholder}</div>
   {/if}
 </div>
-
-<style>
-  /* Not a flex container: Chrome mis-focuses a contenteditable whose parent is one. */
-  .rich-editor-wrap {
-    flex: 1;
-    min-width: 0;
-    position: relative;
-  }
-
-  .rich-editor {
-    min-height: 40vh;
-    max-height: 60vh;
-    overflow: auto;
-    padding: 4px 2px;
-    outline: none;
-    color: var(--text);
-  }
-
-  .rich-editor-placeholder {
-    position: absolute;
-    top: 4px;
-    left: 2px;
-    color: var(--text-muted);
-    pointer-events: none;
-  }
-</style>

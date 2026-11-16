@@ -38,6 +38,7 @@ import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
 import { $exportMarkdown, $importMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
 import { registerTaskShortcut } from './task-shortcut'
+import { theme } from './theme'
 
 /** Marks updates the app makes itself (initial load, external value); they never reach `onChange`. */
 export const EXTERNAL_TAG = 'kept-external'
@@ -68,6 +69,7 @@ export interface EditorCore extends BodyEditor {
 /** Everything the editor needs apart from per-instance state; headless-safe (no DOM, no Svelte). */
 export const RichEditorExtension = defineExtension({
   name: 'kept/rich-editor',
+  theme,
   dependencies: [
     MarkdownNodesExtension,
     RichTextExtension,
