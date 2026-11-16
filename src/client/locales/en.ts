@@ -165,6 +165,11 @@ export const en = {
     barUnlink: 'Remove link',
     barLinkUrl: 'Link URL',
     barLinkApply: 'Apply link',
+    tableActions: 'Table actions',
+    tableInsertRow: 'Insert row below',
+    tableInsertColumn: 'Insert column right',
+    tableDeleteRow: 'Delete row',
+    tableDeleteColumn: 'Delete column',
   },
   imageUrlDialog: {
     title: 'Insert image from URL',

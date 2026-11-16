@@ -1,16 +1,18 @@
 import { $isListItemNode, $isListNode } from '@lexical/list'
 import { $isAutoLinkNode, $isLinkNode, type LinkNode } from '@lexical/link'
 import { $findMatchingParent, calculateZoomLevel } from '@lexical/utils'
-import { $getNearestNodeFromDOMNode, $getSelection, $isRangeSelection } from 'lexical'
+import { $getNearestNodeFromDOMNode, $getSelection, $isRangeSelection, type NodeKey } from 'lexical'
 import { mount, unmount } from 'svelte'
 import FormatBar from '../../components/editor/FormatBar.svelte'
 import PasteChoice from '../../components/editor/PasteChoice.svelte'
+import TableActions, { type TableAction } from '../../components/editor/TableActions.svelte'
 import { linkHref } from '../link-href'
 import { createCardOps } from './cards'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { mountDecorators } from './decorators'
 import { applyLink, formatBarState, type FormatBarState, removeLink, toggleFormat } from './format'
 import { linkClickAction } from './link-click'
+import { deleteColumn, deleteRow, insertColumnRight, insertRowBelow, tableAtCaret } from './tables'
 import { isCheckMarkHit, toggleTask } from './tasks'
 
 // A tap fires `pointerup` and then a synthesized `click`; the second is ignored.
@@ -20,6 +22,16 @@ const TAP_DEDUPE_MS = 500
 // native selection menu sits above it, and the selection handles hang below its end.
 const BAR_GAP = 6
 const BAR_TOUCH_GAP = 28
+
+// Space between the table and its actions button.
+const TABLE_BUTTON_GAP = 2
+
+const TABLE_ACTIONS: Record<TableAction, typeof insertRowBelow> = {
+  insertRow: insertRowBelow,
+  insertColumn: insertColumnRight,
+  deleteRow,
+  deleteColumn,
+}
 
 export interface RichEditorOptions extends EditorCoreOptions {
   root: HTMLElement
@@ -257,6 +269,71 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   root.addEventListener('scroll', placeBar)
   window.addEventListener('resize', placeBar)
 
+  // The table actions button sits at the top-right corner of the table's scroll wrapper, in
+  // the editor's wrapper, so it stays put while the table scrolls sideways. It is mounted only
+  // while the caret is in a table cell, so the menu starts closed each time.
+  let tableButton: { host: HTMLElement; component: Record<string, unknown>; key: NodeKey } | null = null
+  const placeTableButton = (): void => {
+        if (!tableButton) return
+    // The node's element is the scroll wrapper, whose width is what the user sees.
+    const scroller = core.editor.getElementByKey(tableButton.key)
+    const table = scroller?.querySelector('table')
+    if (!scroller || !table) return
+    const box = scroller.getBoundingClientRect()
+    const area = root.getBoundingClientRect()
+    const frame = wrapper.getBoundingClientRect()
+    tableButton.host.hidden = box.bottom < area.top || box.top > area.bottom
+    if (tableButton.host.hidden) return
+    const { offsetWidth: width, offsetHeight: height } = tableButton.host
+    // Above the table; a table taller than the view keeps the button at the top edge.
+    const top = Math.max(box.top - height - TABLE_BUTTON_GAP, area.top)
+    tableButton.host.style.top = `${top - frame.top}px`
+    tableButton.host.style.left = `${Math.max(0, Math.min(box.left + table.offsetWidth, box.right) - frame.left - width)}px`
+  }
+  const closeTableButton = (): void => {
+    if (!tableButton) return
+    // Cleared first: removing the focused button fires `focusout`, which closes again.
+    const closing = tableButton
+    tableButton = null
+    void unmount(closing.component)
+    closing.host.remove()
+  }
+  const refreshTableButton = (): void => {
+    const key = core.editor.isEditable() && !core.gate.active ? tableAtCaret(core.editor) : null
+    const focused = root.contains(document.activeElement) || (tableButton?.host.contains(document.activeElement) ?? false)
+    if (key === null || !focused) return closeTableButton()
+    if (tableButton?.key !== key) {
+      closeTableButton()
+      const host = document.createElement('div')
+      host.style.position = 'absolute'
+      host.style.zIndex = '5'
+      host.addEventListener('focusout', onTableButtonFocusOut)
+      wrapper.append(host)
+      const component = mount(TableActions, {
+        target: host,
+        props: {
+          onaction: (action) => TABLE_ACTIONS[action](core.editor, core.gate),
+          onfocuseditor: focusEditor,
+        },
+      })
+      tableButton = { host, component, key }
+    }
+    placeTableButton()
+  }
+  const onTableButtonFocusOut = (event: FocusEvent): void => {
+    const next = event.relatedTarget
+    if (next instanceof Node && (root.contains(next) || tableButton?.host.contains(next))) return
+    closeTableButton()
+  }
+  const stopTableUpdates = core.editor.registerUpdateListener(refreshTableButton)
+  const stopTableEditable = core.editor.registerEditableListener(refreshTableButton)
+  root.addEventListener('focusin', refreshTableButton)
+  root.addEventListener('focusout', onTableButtonFocusOut)
+  root.addEventListener('compositionstart', refreshTableButton)
+  root.addEventListener('compositionend', refreshTableButton)
+  root.addEventListener('scroll', placeTableButton)
+  window.addEventListener('resize', placeTableButton)
+
   return {
     insertText: (s) => core.insertText(s),
     replaceText: (token, s) => core.replaceText(token, s),
@@ -285,6 +362,15 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       root.removeEventListener('compositionend', refreshBar)
       root.removeEventListener('scroll', placeBar)
       window.removeEventListener('resize', placeBar)
+      stopTableUpdates()
+      stopTableEditable()
+      closeTableButton()
+      root.removeEventListener('focusin', refreshTableButton)
+      root.removeEventListener('focusout', onTableButtonFocusOut)
+      root.removeEventListener('compositionstart', refreshTableButton)
+      root.removeEventListener('compositionend', refreshTableButton)
+      root.removeEventListener('scroll', placeTableButton)
+      window.removeEventListener('resize', placeTableButton)
       stopEditable()
       stopDecorators()
       root.removeEventListener('compositionstart', begin)

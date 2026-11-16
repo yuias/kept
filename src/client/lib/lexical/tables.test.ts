@@ -5,7 +5,7 @@ import { $getRoot, $getSelection, $setSelection, UNDO_COMMAND } from 'lexical'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEditorCore, type EditorCore } from './core'
 import { $exportMarkdown, $rootSeams, roundTrip, TRANSFORMERS } from './markdown'
-import { deleteColumn, deleteRow, insertColumnRight, insertRowBelow } from './tables'
+import { deleteColumn, deleteRow, insertColumnRight, insertRowBelow, tableAtCaret } from './tables'
 
 const open: EditorCore[] = []
 afterEach(() => {
@@ -92,6 +92,19 @@ describe('table operations', () => {
     expect(exported(core)).toBe('| a |  | b |\n| --- | --- | --- |\n| 1 |  | 2 |\n| 3 |  | 4 |')
   })
 
+  it('keeps the caret in its cell after an insert, so a delete acts on the row the user was on', () => {
+    const { core } = create(WITH_HEADER)
+    caretIn(core, 1, 1)
+    insertColumnRight(core.editor, core.gate)
+    expect(core.editor.read(() => $getSelection()?.getNodes().map((node) => node.getTextContent()))).toEqual(['2'])
+    deleteRow(core.editor, core.gate)
+    expect(exported(core)).toBe('| a | b |  |\n| --- | --- | --- |\n| 3 | 4 |  |')
+    caretIn(core, 1, 0)
+    insertRowBelow(core.editor, core.gate)
+    deleteColumn(core.editor, core.gate)
+    expect(exported(core)).toBe('| b |  |\n| --- | --- |\n| 4 |  |\n|  |  |')
+  })
+
   it('keeps the header row when the only body row is deleted, and the export round-trips', () => {
     const { core } = create('| a | b |\n| --- | --- |\n| 1 | 2 |')
     caretIn(core, 1, 1)
@@ -129,6 +142,15 @@ describe('table operations', () => {
     expect(exported(core)).toBe(before)
     expect(core.editor.getEditorState()).toBe(state)
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('names the table holding the caret, and none elsewhere', () => {
+    const { core } = create('intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |')
+    expect(tableAtCaret(core.editor)).toBeNull()
+    caretIn(core, 1, 1)
+    expect(tableAtCaret(core.editor)).toBe(core.editor.read(() => $table().getKey()))
+    core.editor.update(() => $setSelection(null), { discrete: true })
+    expect(tableAtCaret(core.editor)).toBeNull()
   })
 
   it('returns false without a selection', () => {

@@ -157,6 +157,11 @@ export const ja: Messages = {
     barUnlink: 'リンクを削除',
     barLinkUrl: 'リンクのURL',
     barLinkApply: 'リンクを適用',
+    tableActions: '表の操作',
+    tableInsertRow: '下に行を挿入',
+    tableInsertColumn: '右に列を挿入',
+    tableDeleteRow: '行を削除',
+    tableDeleteColumn: '列を削除',
   },
   imageUrlDialog: {
     title: 'URLから画像を挿入',
