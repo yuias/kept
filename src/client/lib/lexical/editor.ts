@@ -1,4 +1,5 @@
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
+import { mountDecorators } from './decorators'
 
 export interface RichEditorOptions extends EditorCoreOptions {
   root: HTMLElement
@@ -9,6 +10,7 @@ export type RichEditorHandle = Omit<EditorCore, 'editor' | 'gate'>
 export function createRichEditor({ root, ...options }: RichEditorOptions): RichEditorHandle {
   const core = createEditorCore(options)
   core.editor.setRootElement(root)
+  const stopDecorators = mountDecorators(core.editor)
   // Lexical never writes `contenteditable`, so an uneditable root would still take input.
   const syncEditable = (editable: boolean): void => {
     root.contentEditable = String(editable)
@@ -28,6 +30,7 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
     setReadOnly: (readOnly, tasksToggleable) => core.setReadOnly(readOnly, tasksToggleable),
     destroy() {
       stopEditable()
+      stopDecorators()
       root.removeEventListener('compositionstart', begin)
       root.removeEventListener('compositionend', end)
       core.editor.setRootElement(null)

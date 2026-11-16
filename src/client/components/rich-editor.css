@@ -158,6 +158,36 @@
   outline-offset: 2px;
 }
 
+/* The node's own element; `EditorImage` renders inside it. */
+.rich-image {
+  display: inline;
+}
+
+.rich-image-img {
+  max-width: 100%;
+  max-height: 50vh;
+  border-radius: 6px;
+  vertical-align: middle;
+}
+
+/* External images are never fetched; the source stays visible instead. */
+.rich-image-external,
+.rich-image-uploading {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.rich-image-url {
+  font-family: var(--mono);
+}
+
+.rich-image-uploading {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
 /*
  * Lists draw their own marks: one box per mark, wide enough for `1.` and
  * right-aligned, so the text starts at the same place after a bullet or a

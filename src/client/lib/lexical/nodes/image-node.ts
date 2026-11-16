@@ -9,11 +9,23 @@ import {
   stringValue,
   withField,
 } from 'lexical'
+import { isLocalImageUrl } from '../../../../shared/images'
 
 export interface ImageDecoration {
   kind: 'image'
   src: string
   alt: string
+}
+
+export type ImageView = 'local' | 'external' | 'uploading'
+
+/**
+ * How the view draws an image: an `<img>` only for the app's own images,
+ * a box for the upload placeholder (empty target), text for anything else.
+ */
+export function imageView(src: string, alt: string): ImageView {
+  if (isLocalImageUrl(src)) return 'local'
+  return src === '' && alt.startsWith('uploading-') ? 'uploading' : 'external'
 }
 
 const imageNodeSchema = nodeSchema<ImageNode>()({
@@ -77,8 +89,10 @@ export class ImageNode extends DecoratorNode<ImageDecoration> {
     return self
   }
 
-  createDOM(_config: EditorConfig): HTMLElement {
-    return $getDocument().createElement('span')
+  createDOM(config: EditorConfig): HTMLElement {
+    const dom = $getDocument().createElement('span')
+    if (config.theme.image) dom.className = config.theme.image
+    return dom
   }
 
   updateDOM(): false {
