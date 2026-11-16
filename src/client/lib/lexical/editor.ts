@@ -589,8 +589,9 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
     line.hidden = true
     wrapper.append(line)
     let drop: DropPoint | null = null
-    const onMove = (move: PointerEvent): void => {
-      drop = dropPointAt(rootBlockBoxes(core.editor), move.clientY)
+    let pointerY = event.clientY
+    const update = (): void => {
+      drop = dropPointAt(rootBlockBoxes(core.editor), pointerY)
       // A drop that would leave the block where it is shows no line.
       if (drop && !canMoveBlock(core.editor, key, drop.key, drop.side)) drop = null
       line.hidden = drop === null
@@ -603,8 +604,13 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       line.style.left = `${area.left - frame.left + left}px`
       line.style.width = `${root.clientWidth - left - parseFloat(style.paddingRight)}px`
     }
+    const onMove = (move: PointerEvent): void => {
+      pointerY = move.clientY
+      update()
+    }
     const finish = (apply: boolean): void => {
       button.removeEventListener('pointermove', onMove)
+      root.removeEventListener('scroll', update)
       button.removeEventListener('pointerup', onUp)
       button.removeEventListener('pointercancel', onCancel)
       document.removeEventListener('keydown', onEscape, true)
@@ -626,6 +632,8 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       finish(false)
     }
     button.addEventListener('pointermove', onMove)
+    // Scrolling moves the blocks under a still pointer.
+    root.addEventListener('scroll', update)
     button.addEventListener('pointerup', onUp)
     button.addEventListener('pointercancel', onCancel)
     document.addEventListener('keydown', onEscape, true)
