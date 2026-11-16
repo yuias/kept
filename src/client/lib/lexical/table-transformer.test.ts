@@ -321,22 +321,22 @@ describe('paragraphs that start with a pipe', () => {
       expect(reloaded.filter((node) => (node as unknown[])[0] instanceof Array)).toHaveLength(tables)
     })
 
-  keeps('escapes a line after a table, which would become a row', () => [table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('x')))]), ...paragraphs('|x')], '| h |\n| --- |\n| x |\n\\|x', 1)
+  keeps('separates a line after a table, which would become a row', () => [table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('x')))]), ...paragraphs('|x')], '| h |\n| --- |\n| x |\n\n|x', 1)
   keeps('keeps a line before a table', () => [...paragraphs('|x'), table([cell(true, paragraph(text('h')))])], '|x\n| h |\n| --- |', 1)
   keeps('keeps a line after a blank line that follows a table', () => [table([cell(true, paragraph(text('h')))]), paragraph(), ...paragraphs('|x')], '| h |\n| --- |\n\n|x', 1)
   keeps('escapes a line that a delimiter paragraph would turn into a header', () => paragraphs('| a |', '| --- |'), '\\| a |\n| --- |')
   keeps('escapes a header and the delimiter line it would form with the next one', () => paragraphs('| a |', '| --- |', '| --- |'), '\\| a |\n\\| --- |\n| --- |')
   keeps('keeps lines that do not form a table', () => paragraphs('|x', '| a | b |', '| --- |'), '|x\n| a | b |\n| --- |')
   keeps(
-    'escapes a line before a table whose header row is a delimiter row',
+    'separates a line from a table whose header row is a delimiter row',
     () => [...paragraphs('| x |'), table([cell(true, paragraph(text('-')))], [cell(false, paragraph(text('y')))])],
-    '\\| x |\n| - |\n| --- |\n| y |',
+    '| x |\n\n| - |\n| --- |\n| y |',
     1,
   )
   keeps(
-    'escapes a line before a table whose header cell is a centered delimiter',
+    'separates a line from a table whose header cell is a centered delimiter',
     () => [...paragraphs('| x |'), table([cell(true, paragraph(text(':-:')))], [cell(false, paragraph(text('y')))])],
-    '\\| x |\n| :-: |\n| --- |\n| y |',
+    '| x |\n\n| :-: |\n| --- |\n| y |',
     1,
   )
   keeps('escapes inside one paragraph with a line break', () => [paragraph(text('| a |'), $createLineBreakNode(), text('| --- |'))], '\\| a |\n| --- |')

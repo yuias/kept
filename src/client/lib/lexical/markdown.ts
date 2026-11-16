@@ -13,23 +13,28 @@ import {
 } from '@lexical/markdown'
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
 import { $isListItemNode, $isListNode, type ListNode } from '@lexical/list'
-import { $isTableCellNode } from '@lexical/table'
+import { $isTableCellNode, $isTableNode } from '@lexical/table'
+import { marked } from 'marked'
 import {
+  $getRoot,
   $isElementNode,
   $isLineBreakNode,
+  $isParagraphNode,
   $isTextNode,
   defineExtension,
   IS_BOLD,
   IS_CODE,
   IS_ITALIC,
   IS_STRIKETHROUGH,
+  type ElementNode,
   type LexicalEditorWithDispose,
   type LexicalNode,
   type TextNode,
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
-import { createTableTransformer } from './table-transformer'
+import { $isCardNode } from './nodes/card-node'
+import { createTableTransformer, isTableStart } from './table-transformer'
 import { CARD, CODE_SPAN, IMAGE, INDENTED_CODE, KEPT_LINK, PARAGRAPH_LINE_START, RULE } from './transformers'
 
 // Cells hold inline markup only, so the table reads them with the inline transformers.
@@ -135,8 +140,52 @@ export function $importMarkdown(markdown: string, transformers: Transformer[] = 
   $convertFromMarkdownString(markdown, transformers, undefined, true, false)
 }
 
-export function $exportMarkdown(transformers: Transformer[] = TRANSFORMERS): string {
-  return $convertToMarkdownString(transformers, undefined, true)
+/** `${a.getKey()}|${b.getKey()}` for every pair of adjacent root children. */
+export function $rootSeams(): Set<string> {
+  const children = $getRoot().getChildren()
+  return new Set(children.slice(1).map((child, index) => `${children[index]!.getKey()}|${child.getKey()}`))
+}
+
+// `createMarkdownExport` only calls `getChildren()` on the node it is given, so a
+// stand-in container exports one root child at a time.
+const $exportBlock = (child: LexicalNode, transformers: Transformer[]): string =>
+  $convertToMarkdownString(transformers, { getChildren: () => [child] } as unknown as ElementNode, true)
+
+const blockTypes = (markdown: string): string[] => marked.lexer(markdown).map((token) => token.type).filter((type) => type !== 'space')
+// True when a single newline between the two blocks makes GFM read them differently.
+const joins = (a: string, b: string): boolean => blockTypes(`${a}\n${b}`).join() !== [...blockTypes(a), ...blockTypes(b)].join()
+
+// Enter writes a single newline and the app reads card lines one by one, so two
+// paragraph-like blocks are never separated by a blank line.
+const isParagraphLike = (node: LexicalNode): boolean => $isParagraphNode(node) || $isCardNode(node)
+
+/**
+ * The stock export, one root child at a time. Two adjacent blocks that GFM would
+ * read as something else when joined by one newline (`a` + `---` is a heading,
+ * `x` after a table is a row) get a blank line instead. `loadedSeams` lists the
+ * pairs that were adjacent when the note was loaded: their bytes came from the
+ * source and stay as they are.
+ */
+export function $exportMarkdown(transformers: Transformer[] = TRANSFORMERS, loadedSeams: ReadonlySet<string> = new Set()): string {
+  const children = $getRoot().getChildren()
+  const pieces = children.map((child) => $exportBlock(child, transformers))
+  return pieces.reduce((out, piece, index) => {
+    if (index === 0) return piece
+    const a = children[index - 1]!
+    const b = children[index]!
+    const previous = pieces[index - 1]!
+    // The importer reads a `|` line after a table as a row, and a paragraph line
+    // before a delimiter row as a header. Editing a loaded neighbour into one of
+    // these must not be covered by the exemption.
+    const readAsTable =
+      ($isTableNode(a) && piece.startsWith('|')) ||
+      ($isTableNode(b) && $isParagraphNode(a) && isTableStart(previous.slice(previous.lastIndexOf('\n') + 1), piece.split('\n')[0]))
+    const blank =
+      previous !== '' &&
+      piece !== '' &&
+      (readAsTable || (!loadedSeams.has(`${a.getKey()}|${b.getKey()}`) && !(isParagraphLike(a) && isParagraphLike(b)) && joins(previous, piece)))
+    return out + (blank ? '\n\n' : '\n') + piece
+  }, '')
 }
 
 export function createMarkdownEditor(): LexicalEditorWithDispose {
@@ -155,7 +204,8 @@ export function createMarkdownEditor(): LexicalEditorWithDispose {
 export function roundTrip(markdown: string, transformers: Transformer[] = TRANSFORMERS): string {
   const editor = createMarkdownEditor()
   editor.update(() => $importMarkdown(markdown, transformers), { discrete: true })
-  const exported = editor.read(() => $exportMarkdown(transformers))
+  const loadedSeams = editor.read($rootSeams)
+  const exported = editor.read(() => $exportMarkdown(transformers, loadedSeams))
   editor.dispose()
   return exported
 }

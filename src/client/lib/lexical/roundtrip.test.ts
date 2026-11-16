@@ -215,7 +215,16 @@ describe('rule nodes made in the editor', () => {
       $createHorizontalRuleNode(),
       $createParagraphNode().append($createTextNode('[ ] b')),
     ])
-    expect(markdown).toBe('a\n---\n\\---\n---\n\\[ ] b')
-    expect(shape).toEqual([['paragraph', 'a'], 'horizontalrule', ['paragraph', '---'], 'horizontalrule', ['paragraph', '[ ] b']])
+    // A rule right after a paragraph would be a setext underline, so it gets a blank line; after a reload that line is an empty paragraph.
+    expect(markdown).toBe('a\n\n---\n\\---\n\n---\n\\[ ] b')
+    expect(shape).toEqual([
+      ['paragraph', 'a'],
+      'paragraph',
+      'horizontalrule',
+      ['paragraph', '---'],
+      'paragraph',
+      'horizontalrule',
+      ['paragraph', '[ ] b'],
+    ])
   })
 })
