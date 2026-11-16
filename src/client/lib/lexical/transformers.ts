@@ -1,15 +1,22 @@
+import { $createHorizontalRuleNode, $isHorizontalRuleNode, HorizontalRuleNode } from '@lexical/extension'
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
-import { LINK, type ElementTransformer, type TextMatchTransformer } from '@lexical/markdown'
+import {
+  CODE,
+  LINK,
+  type ElementTransformer,
+  type MultilineElementTransformer,
+  type TextMatchTransformer,
+} from '@lexical/markdown'
 import { $isParagraphNode, $isRootNode, $isTextNode, IS_CODE, ParagraphNode } from 'lexical'
 import { CARD_LINE_PATTERN, cardMarkup, parseCardLine } from '../../../shared/link-card'
-import { escapeLineStart, type LineStartBlocks } from './escape'
+import { escapeLineStart, THEMATIC_BREAK, type LineStartBlocks } from './escape'
 import { $createCardNode, $isCardNode, CardNode } from './nodes/card-node'
 import { $createImageNode, $isImageNode, ImageNode } from './nodes/image-node'
 
-// Thematic breaks and table rows are plain paragraphs until the RULE and TABLE
-// transformers exist; escaping them now would change the bytes of notes that
-// load and export unchanged. Switch each flag on together with its transformer.
-const LINE_START_BLOCKS: LineStartBlocks = { thematicBreak: false, tableRow: false }
+// Table rows are plain paragraphs until the TABLE transformer exists; escaping
+// them now would change the bytes of notes that load and export unchanged.
+// Switch the flag on together with the transformer.
+const LINE_START_BLOCKS: LineStartBlocks = { thematicBreak: true, tableRow: false }
 
 // Never matches: the transformer exists only to post-process what a paragraph
 // exports, so a paragraph must not be imported through it.
@@ -148,4 +155,57 @@ export const CARD: ElementTransformer = {
     return false
   },
   type: 'element',
+}
+
+/**
+ * A thematic break line is a rule, and every spelling is written back as
+ * `---`. Must come before the list transformers, which read `- - -` and
+ * `* * *` as list items.
+ */
+export const RULE: ElementTransformer = {
+  dependencies: [HorizontalRuleNode],
+  export: (node) => ($isHorizontalRuleNode(node) ? '---' : null),
+  regExp: THEMATIC_BREAK,
+  replace: (parentNode, _children, _match, isImport) => {
+    const rule = $createHorizontalRuleNode()
+    // A shortcut at the end of the document keeps the paragraph below the rule
+    // for the caret; an import has no caret.
+    if (isImport || parentNode.getNextSibling() !== null) parentNode.replace(rule)
+    else parentNode.insertBefore(rule)
+    if (!isImport) rule.selectNext()
+  },
+  type: 'element',
+}
+
+// Group 1 is the fence line's leading whitespace plus the fence, as in the
+// stock `CODE` transformer, which the callers of this one read.
+const FENCE_START = /^([ \t]*(?:`{3,}|~{3,}))([\w-]+)?[ \t]?/
+
+/**
+ * The stock `CODE` transformer, plus `~~~` fences. A tilde fence is imported
+ * as the backtick fence the stock importer reads (written back as ```` ``` ````),
+ * so the block runs to the first closing tilde fence at least as long as the
+ * opening one, and backtick lines inside it stay content.
+ */
+export const FENCED_CODE: MultilineElementTransformer = {
+  ...CODE,
+  handleImportAfterStartMatch: (args) => {
+    const { lines, startLineIndex, startMatch } = args
+    const opening = startMatch[1]!.trim()
+    if (!opening.startsWith('~')) return CODE.handleImportAfterStartMatch!(args)
+
+    const indent = startMatch[1]!.slice(0, startMatch[1]!.length - opening.length)
+    const closing = new RegExp(`^[ \\t]*~{${opening.length},}[ \\t]*$`)
+    const closingIndex = lines.findIndex((line, i) => i > startLineIndex && closing.test(line))
+    const last = closingIndex === -1 ? lines.length - 1 : closingIndex
+    // A fence longer than any backtick run in the block cannot be closed from inside it.
+    const longestRun = Math.max(0, ...lines.slice(startLineIndex, last + 1).flatMap((line) => (line.match(/`+/g) ?? []).map((run) => run.length)))
+    const fence = '`'.repeat(Math.max(3, longestRun + 1))
+
+    const rewritten = [...lines]
+    rewritten[startLineIndex] = indent + fence + lines[startLineIndex]!.slice(indent.length + opening.length)
+    if (closingIndex !== -1) rewritten[closingIndex] = indent + fence
+    return CODE.handleImportAfterStartMatch!({ ...args, lines: rewritten, startMatch: rewritten[startLineIndex]!.match(FENCE_START)! })
+  },
+  regExpStart: FENCE_START,
 }

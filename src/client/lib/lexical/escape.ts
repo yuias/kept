@@ -120,7 +120,8 @@ export function escapePlainText(text: string, before: Edge, after: Edge, imageSy
   return out
 }
 
-const THEMATIC_BREAK = /^ {0,3}([-*_])(?: *\1){2,} *$/
+/** What the importer reads as a thematic break; the rule transformer matches the same lines. */
+export const THEMATIC_BREAK = /^ {0,3}([-*_])(?: *\1){2,} *$/
 
 export interface LineStartBlocks {
   /** Thematic break lines (`---`, `* * *`); on while the importer reads them as a rule. */
@@ -131,7 +132,7 @@ export interface LineStartBlocks {
 
 /**
  * Escapes a line that would read as a block when it starts a paragraph: ATX
- * heading, quote, list item, fence, card line, table row or thematic break. The last two
+ * heading, quote, list item, task item, fence, card line, table row or thematic break. The last two
  * only count while the importer turns them into blocks (`blocks`); before
  * that, such a line is an ordinary paragraph and must keep its bytes. The
  * importer reads `\s` after a marker (tab and U+3000 included) and any number
@@ -148,6 +149,8 @@ export function escapeLineStart(
   if (/^(?:[-+*]\s|\d+\.\s|\d{1,9}[.)](?: |$))/.test(rest)) {
     return insertAt(indent + (/^[-+*]/.test(rest) ? 0 : /^\d+/.exec(rest)![0].length))
   }
+  // The check list pattern makes its `- ` marker optional, so `[ ] x` alone is a task item.
+  if (/^\s*\[(?:\s|x)?\]\s/i.test(line)) return insertAt(indent)
   if (/^(?:#{1,6}(?:\s|$)|>)/.test(line) || (blocks.tableRow && line.startsWith('|'))) return insertAt(0)
   // The importer opens a code block on any line that starts with three backticks.
   const fenceIndent = /^[ \t]*(?:`{3,}|~{3,})/.test(line) ? /^[ \t]*/.exec(line)![0].length : -1

@@ -2,13 +2,17 @@ import { buildEditorFromExtensions } from '@lexical/extension'
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
+  CHECK_LIST,
+  CODE,
   HIGHLIGHT,
   LINK,
   setPlainTextEscaper,
   TRANSFORMERS as STOCK_TRANSFORMERS,
+  UNORDERED_LIST,
   type Transformer,
 } from '@lexical/markdown'
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
+import { $isListItemNode, $isListNode, type ListNode } from '@lexical/list'
 import {
   $isLineBreakNode,
   $isTextNode,
@@ -22,14 +26,17 @@ import {
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
-import { CARD, CODE_SPAN, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START } from './transformers'
+import { CARD, CODE_SPAN, FENCED_CODE, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START, RULE } from './transformers'
 
 // Highlight (`==x==`) cannot be stored in markdown that GitHub-style readers
 // understand, so it stays plain text.
 export const TRANSFORMERS: Transformer[] = [
-  ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT).flatMap((transformer) =>
-    transformer === LINK ? [IMAGE, KEPT_LINK] : [transformer],
-  ),
+  ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT).flatMap((transformer) => {
+    if (transformer === LINK) return [IMAGE, KEPT_LINK]
+    // The rule and the check list read lines the list transformers would take.
+    if (transformer === UNORDERED_LIST) return [RULE, CHECK_LIST, transformer]
+    return [transformer === CODE ? FENCED_CODE : transformer]
+  }),
   CARD,
   CODE_SPAN,
   PARAGRAPH_LINE_START,
@@ -51,15 +58,28 @@ function edge(sibling: LexicalNode | null, last: boolean): Edge {
   return (last ? /.$/su : /^./su).exec(sibling.getTextContent())?.[0] ?? ''
 }
 
+const isBulletItem = (node: LexicalNode | null): boolean =>
+  $isListItemNode(node) && $isListNode(node.getParent()) && (node.getParent() as ListNode).getListType() === 'bullet'
+
 // The stock exporter escapes every `*_`~` in preserve-newlines mode; this
 // escapes only what the importer would read as markup (see escape.ts). A
 // formatted node is wrapped in delimiters itself, so both its edges are
 // delimiter edges.
 setPlainTextEscaper((text, node) => {
   const own = delimiterOf(node.getFormat())
-  const escaped = own
+  let escaped = own
     ? escapePlainText(text, { delimiter: own }, { delimiter: own }, true)
     : escapePlainText(text, edge(node.getPreviousSibling(), true), edge(node.getNextSibling(), false), true)
+  // CHECK_LIST reads `- [ ] x` and `[ ] x` alike, so a bullet item whose text starts
+  // with `[ ]` would reload as a task. The `[` is the only character to escape.
+  if (!own && !node.getPreviousSibling() && isBulletItem(node.getParent())) {
+    const next = edge(node.getNextSibling(), false)
+    const head = /^\s?\[(?:\s|x)?\]\s/i.exec(escaped + (typeof next === 'string' ? next : ''))
+    if (head) {
+      const at = head[0].indexOf('[')
+      escaped = `${escaped.slice(0, at)}\\${escaped.slice(at)}`
+    }
+  }
   // A `!` right before a link would join it into `![label](url)`. Only an
   // escape the importer would otherwise read as an image is worth the byte
   // change: links that IMAGE does not match (`<url>`, parentheses) keep `!`.

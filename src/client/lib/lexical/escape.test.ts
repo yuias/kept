@@ -138,13 +138,17 @@ describe('escapeLineStart', () => {
     expect(escapeLineStart('\\- x')).toBe('\\- x')
     expect(escapeLineStart('~~~')).toBe('\\~~~')
     expect(escapeLineStart('| a | b |')).toBe('\\| a | b |')
+    expect(escapeLineStart('[ ] x')).toBe('\\[ ] x')
+    expect(escapeLineStart('  [x] x')).toBe('  \\[x] x')
+    expect(escapeLineStart('[X] x')).toBe('\\[X] x')
+    expect(escapeLineStart('[] x')).toBe('\\[] x')
     expect(escapeLineStart('---')).toBe('\\---')
     expect(escapeLineStart('***')).toBe('\\***')
     expect(escapeLineStart('_ _ _')).toBe('\\_ _ _')
   })
 
   it('leaves ordinary lines alone', () => {
-    for (const line of ['', 'a # b', '#tag', '#1', '-a', '1.5 x', 'a > b', '--', '`code`', '2 * 3']) {
+    for (const line of ['', 'a # b', '#tag', '#1', '-a', '1.5 x', 'a > b', '--', '`code`', '2 * 3', '[ ]', '[x]', '[a] x', '[ x] x', '[link](u) x']) {
       expect(escapeLineStart(line), line).toBe(line)
     }
   })
