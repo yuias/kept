@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { classifyRoundTrip } from './fidelity'
 import { roundTrip } from './markdown'
 
 const load = (files: Record<string, string>, suffix: string): Map<string, string> =>
@@ -78,6 +79,7 @@ describe('round-trip fixtures', () => {
         const output = normalizeOut.get(name)!
         expect(roundTrip(source)).toBe(output)
         expect(roundTrip(output)).toBe(output)
+        expect(classifyRoundTrip(source, output)).not.toBe('render-different')
       })
     }
   })
