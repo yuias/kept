@@ -28,23 +28,36 @@
   // the full-document comparison on every keystroke.
   let synced = untrack(() => value)
 
+  // A note the editor cannot load (for example markdown nested deep enough to overflow the
+  // parser's stack) opens in the textarea like an unsupported one, instead of an empty editor.
+  const fallBack = (error: unknown): void => {
+    console.error(error)
+    handle?.destroy()
+    handle = undefined
+    onunsupported?.()
+  }
+
   onMount(() => {
-    handle = createRichEditor({
-      root: host!,
-      value: untrack(() => value),
-      readOnly: untrack(() => readonly),
-      tasksToggleable: untrack(() => tasksToggleable),
-      onChange: (next) => {
-        synced = next
-        value = next
-        onchange?.(next)
-      },
-      onPaste: (event) => onpaste?.(event),
-      onUnsupported: () => onunsupported?.(),
-      onEmptyChange: (next) => {
-        empty = next
-      },
-    })
+    try {
+      handle = createRichEditor({
+        root: host!,
+        value: untrack(() => value),
+        readOnly: untrack(() => readonly),
+        tasksToggleable: untrack(() => tasksToggleable),
+        onChange: (next) => {
+          synced = next
+          value = next
+          onchange?.(next)
+        },
+        onPaste: (event) => onpaste?.(event),
+        onUnsupported: () => onunsupported?.(),
+        onEmptyChange: (next) => {
+          empty = next
+        },
+      })
+    } catch (error) {
+      fallBack(error)
+    }
     return () => {
       handle?.destroy()
       handle = undefined
@@ -55,7 +68,11 @@
     const next = value
     if (!handle || next === synced) return
     synced = next
-    handle.setValue(next)
+    try {
+      handle.setValue(next)
+    } catch (error) {
+      fallBack(error)
+    }
   })
 
   $effect(() => {
