@@ -34,6 +34,7 @@ import {
   type UpdateListener,
 } from 'lexical'
 import { CompositionGate } from './composition'
+import { registerEmojiShortcut } from './emoji'
 import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
@@ -113,6 +114,7 @@ export const RichEditorExtension = defineExtension({
       // Lexical skips shortcuts while an IME composition is active.
       registerMarkdownShortcuts(ignoreExternalUpdates(editor), TRANSFORMERS),
       registerTaskShortcut(editor),
+      registerEmojiShortcut(editor),
       registerFormatKeys(editor),
       // A line break in a heading or list item exports as a soft break that reloads
       // as a separate root paragraph, so it splits the block like Enter does. Some

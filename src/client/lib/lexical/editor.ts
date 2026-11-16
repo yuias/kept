@@ -1,8 +1,19 @@
 import { $isListItemNode, $isListNode } from '@lexical/list'
 import { $isAutoLinkNode, $isLinkNode, type LinkNode } from '@lexical/link'
-import { $findMatchingParent, calculateZoomLevel } from '@lexical/utils'
-import { $getNearestNodeFromDOMNode, $getSelection, $isRangeSelection, type NodeKey } from 'lexical'
+import { $findMatchingParent, calculateZoomLevel, mergeRegister } from '@lexical/utils'
+import {
+  $getNearestNodeFromDOMNode,
+  $getSelection,
+  $isRangeSelection,
+  COMMAND_PRIORITY_CRITICAL,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
+  KEY_TAB_COMMAND,
+  type NodeKey,
+} from 'lexical'
 import { mount, unmount } from 'svelte'
+import EmojiMenu, { type EmojiMenuState } from '../../components/editor/EmojiMenu.svelte'
 import FormatBar from '../../components/editor/FormatBar.svelte'
 import PasteChoice from '../../components/editor/PasteChoice.svelte'
 import TableActions, { type TableAction } from '../../components/editor/TableActions.svelte'
@@ -10,6 +21,7 @@ import { linkHref } from '../link-href'
 import { createCardOps } from './cards'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { mountDecorators } from './decorators'
+import { type EmojiEntry, loadedEmojiIndex, loadEmojiIndex, matchEmoji, pickEmoji, shortcodeQuery } from './emoji'
 import { applyLink, formatBarState, type FormatBarState, removeLink, toggleFormat } from './format'
 import { linkClickAction } from './link-click'
 import { deleteColumn, deleteRow, insertColumnRight, insertRowBelow, tableAtCaret } from './tables'
@@ -25,6 +37,10 @@ const BAR_TOUCH_GAP = 28
 
 // Space between the table and its actions button.
 const TABLE_BUTTON_GAP = 2
+
+// Space between the shortcode and the emoji menu, and the number of suggestions it lists.
+const EMOJI_GAP = 2
+const EMOJI_LIMIT = 8
 
 const TABLE_ACTIONS: Record<TableAction, typeof insertRowBelow> = {
   insertRow: insertRowBelow,
@@ -213,10 +229,13 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
     void unmount(closing.component)
     closing.host.remove()
   }
+  // A field inside the editor (a card's URL input) has its own text; the bar would format the
+  // editor selection behind it.
+  const fieldInEditor = (): boolean => document.activeElement instanceof HTMLInputElement && root.contains(document.activeElement)
   const refreshBar = (): void => {
     const inBar = bar?.host.contains(document.activeElement) ?? false
     const state = formatBarState(core.editor)
-    if (core.gate.active || !state.visible || !(inBar || root.contains(document.activeElement))) return closeBar()
+    if (core.gate.active || !state.visible || fieldInEditor() || !(inBar || root.contains(document.activeElement))) return closeBar()
     let range = bar?.range
     if (!inBar) {
       const selection = window.getSelection()
@@ -274,7 +293,7 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   // while the caret is in a table cell, so the menu starts closed each time.
   let tableButton: { host: HTMLElement; component: Record<string, unknown>; key: NodeKey } | null = null
   const placeTableButton = (): void => {
-        if (!tableButton) return
+    if (!tableButton) return
     // The node's element is the scroll wrapper, whose width is what the user sees.
     const scroller = core.editor.getElementByKey(tableButton.key)
     const table = scroller?.querySelector('table')
@@ -301,7 +320,7 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   const refreshTableButton = (): void => {
     const key = core.editor.isEditable() && !core.gate.active ? tableAtCaret(core.editor) : null
     const focused = root.contains(document.activeElement) || (tableButton?.host.contains(document.activeElement) ?? false)
-    if (key === null || !focused) return closeTableButton()
+    if (key === null || !focused || fieldInEditor()) return closeTableButton()
     if (tableButton?.key !== key) {
       closeTableButton()
       const host = document.createElement('div')
@@ -333,6 +352,164 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   root.addEventListener('compositionend', refreshTableButton)
   root.addEventListener('scroll', placeTableButton)
   window.addEventListener('resize', placeTableButton)
+
+  // The emoji menu opens below an open `:name` and stays while the caret is in it. It is
+  // mounted only while shown. The editor keeps the focus, so the keys come in as editor
+  // commands, registered only while the menu is open.
+  let emojiMenu: {
+    host: HTMLElement
+    component: Record<string, unknown>
+    items: readonly EmojiEntry[]
+    active: number
+    queryLength: number
+    stopKeys: () => void
+  } | null = null
+  const emojiListeners = new Set<(state: EmojiMenuState) => void>()
+  // The shortcode whose menu the user closed with Esc; it stays closed until the caret leaves it.
+  let dismissedEmoji: string | null = null
+  let destroyed = false
+  const publishEmoji = (): void => {
+    if (!emojiMenu) return
+    const state = { items: emojiMenu.items, active: emojiMenu.active }
+    for (const listener of [...emojiListeners]) listener(state)
+  }
+  const placeEmoji = (): void => {
+    if (!emojiMenu) return
+    const selection = window.getSelection()
+    const node = selection?.anchorNode
+    if (!selection || selection.rangeCount === 0 || !node || !root.contains(node)) return
+    // The range over `:query` has a rect even where a collapsed caret has none.
+    const range = document.createRange()
+    const length = emojiMenu.queryLength + 1
+    if (node.nodeType === Node.TEXT_NODE && selection.anchorOffset >= length) {
+      range.setStart(node, selection.anchorOffset - length)
+      range.setEnd(node, selection.anchorOffset)
+    } else {
+      range.setStart(node, selection.anchorOffset)
+      range.collapse(true)
+    }
+    const rects = range.getClientRects()
+    const line = rects[rects.length - 1] ?? range.getBoundingClientRect()
+    const area = root.getBoundingClientRect()
+    const frame = wrapper.getBoundingClientRect()
+    emojiMenu.host.hidden = line.bottom < area.top || line.top > area.bottom
+    if (emojiMenu.host.hidden) return
+    const { offsetWidth: width, offsetHeight: height } = emojiMenu.host
+    // The on-screen keyboard shrinks the visual viewport, not the layout one.
+    const viewport = window.visualViewport
+    const bottom = Math.min(area.bottom, viewport ? viewport.offsetTop + viewport.height : innerHeight)
+    const below = line.bottom + EMOJI_GAP
+    const above = line.top - height - EMOJI_GAP
+    const top = below + height > bottom && above >= area.top ? above : below
+    emojiMenu.host.style.top = `${top - frame.top}px`
+    emojiMenu.host.style.left = `${Math.max(0, Math.min(line.left - frame.left, frame.width - width))}px`
+  }
+  const closeEmoji = (): void => {
+    if (!emojiMenu) return
+    // Cleared first, as with the other popups.
+    const closing = emojiMenu
+    emojiMenu = null
+    closing.stopKeys()
+    document.removeEventListener('keydown', onEmojiEscape, true)
+    void unmount(closing.component)
+    closing.host.remove()
+  }
+  const moveEmoji = (delta: number): void => {
+    if (!emojiMenu) return
+    emojiMenu.active = (emojiMenu.active + delta + emojiMenu.items.length) % emojiMenu.items.length
+    publishEmoji()
+  }
+  const pickEmojiEntry = (entry: EmojiEntry): void => {
+    pickEmoji(core.editor, core.gate, entry.emoji)
+    closeEmoji()
+  }
+  // In the capture phase, as in `TableActions`: Lexical would blur the editor on Esc, and the
+  // note's dialog would close unless its default is prevented.
+  const onEmojiEscape = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape' || !emojiMenu) return
+    event.preventDefault()
+    event.stopPropagation()
+    dismissedEmoji = shortcodeQuery(core.editor)?.id ?? null
+    closeEmoji()
+  }
+  // A key with a modifier is the editor's own (Shift-Enter, Alt-Arrow, ...).
+  const emojiKey = (action: () => void) => (event: KeyboardEvent | null): boolean => {
+    if (!emojiMenu || event?.shiftKey || event?.ctrlKey || event?.metaKey || event?.altKey) return false
+    event?.preventDefault()
+    action()
+    return true
+  }
+  const pickActiveEmoji = (): void => {
+    if (emojiMenu) pickEmojiEntry(emojiMenu.items[emojiMenu.active]!)
+  }
+  const refreshEmoji = (): void => {
+    if (destroyed) return
+    const query = root.contains(document.activeElement) && !core.gate.active ? shortcodeQuery(core.editor) : null
+    if (!query || query.id === dismissedEmoji) {
+      if (!query) dismissedEmoji = null
+      return closeEmoji()
+    }
+    const index = loadedEmojiIndex()
+    if (!index) {
+      void loadEmojiIndex().then((loaded) => loaded && refreshEmoji())
+      return
+    }
+    const items = matchEmoji(index, query.query, EMOJI_LIMIT)
+    if (items.length === 0) return closeEmoji()
+    if (!emojiMenu) {
+      const host = document.createElement('div')
+      host.style.position = 'absolute'
+      host.style.zIndex = '5'
+      wrapper.append(host)
+      const component = mount(EmojiMenu, {
+        target: host,
+        props: {
+          subscribe: (listener) => {
+            emojiListeners.add(listener)
+            listener({ items: emojiMenu?.items ?? [], active: emojiMenu?.active ?? 0 })
+            return () => emojiListeners.delete(listener)
+          },
+          onpick: pickEmojiEntry,
+          onhover: (active) => {
+            if (!emojiMenu) return
+            emojiMenu.active = active
+            publishEmoji()
+          },
+        },
+      })
+      emojiMenu = {
+        host,
+        component,
+        items,
+        active: 0,
+        queryLength: query.query.length,
+        stopKeys: mergeRegister(
+          // Critical: the table extension takes arrows and Tab at high priority in a cell.
+          core.editor.registerCommand(KEY_ARROW_DOWN_COMMAND, emojiKey(() => moveEmoji(1)), COMMAND_PRIORITY_CRITICAL),
+          core.editor.registerCommand(KEY_ARROW_UP_COMMAND, emojiKey(() => moveEmoji(-1)), COMMAND_PRIORITY_CRITICAL),
+          core.editor.registerCommand(KEY_ENTER_COMMAND, emojiKey(pickActiveEmoji), COMMAND_PRIORITY_CRITICAL),
+          core.editor.registerCommand(KEY_TAB_COMMAND, emojiKey(pickActiveEmoji), COMMAND_PRIORITY_CRITICAL),
+        ),
+      }
+      document.addEventListener('keydown', onEmojiEscape, true)
+    } else {
+      // The same suggestions keep the highlight where the user moved it.
+      const same = items.length === emojiMenu.items.length && items.every((item, i) => item.name === emojiMenu!.items[i]!.name)
+      emojiMenu.items = items
+      emojiMenu.queryLength = query.query.length
+      if (!same) emojiMenu.active = 0
+    }
+    publishEmoji()
+    placeEmoji()
+  }
+  const stopEmojiUpdates = core.editor.registerUpdateListener(refreshEmoji)
+  const stopEmojiEditable = core.editor.registerEditableListener(refreshEmoji)
+  root.addEventListener('focusout', closeEmoji)
+  root.addEventListener('compositionstart', refreshEmoji)
+  root.addEventListener('compositionend', refreshEmoji)
+  root.addEventListener('scroll', placeEmoji)
+  window.addEventListener('resize', placeEmoji)
+  window.visualViewport?.addEventListener('resize', placeEmoji)
 
   return {
     insertText: (s) => core.insertText(s),
@@ -371,6 +548,16 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       root.removeEventListener('compositionend', refreshTableButton)
       root.removeEventListener('scroll', placeTableButton)
       window.removeEventListener('resize', placeTableButton)
+      destroyed = true
+      stopEmojiUpdates()
+      stopEmojiEditable()
+      closeEmoji()
+      root.removeEventListener('focusout', closeEmoji)
+      root.removeEventListener('compositionstart', refreshEmoji)
+      root.removeEventListener('compositionend', refreshEmoji)
+      root.removeEventListener('scroll', placeEmoji)
+      window.removeEventListener('resize', placeEmoji)
+      window.visualViewport?.removeEventListener('resize', placeEmoji)
       stopEditable()
       stopDecorators()
       root.removeEventListener('compositionstart', begin)

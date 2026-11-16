@@ -162,6 +162,7 @@ export const ja: Messages = {
     tableInsertColumn: '右に列を挿入',
     tableDeleteRow: '行を削除',
     tableDeleteColumn: '列を削除',
+    emojiSuggestions: '絵文字の候補',
   },
   imageUrlDialog: {
     title: 'URLから画像を挿入',

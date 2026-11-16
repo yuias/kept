@@ -170,6 +170,7 @@ export const en = {
     tableInsertColumn: 'Insert column right',
     tableDeleteRow: 'Delete row',
     tableDeleteColumn: 'Delete column',
+    emojiSuggestions: 'Emoji suggestions',
   },
   imageUrlDialog: {
     title: 'Insert image from URL',
