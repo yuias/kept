@@ -20,8 +20,6 @@ import { $isHeadingNode, RichTextExtension } from '@lexical/rich-text'
 import { TableExtension } from '@lexical/table'
 import { $getNearestBlockElementAncestorOrThrow, mergeRegister } from '@lexical/utils'
 import {
-  $createParagraphNode,
-  $getRoot,
   $getSelection,
   $isRangeSelection,
   $isTextNode,
@@ -32,16 +30,18 @@ import {
   TextNode,
   type LexicalEditor,
   type LexicalEditorWithDispose,
+  type UpdateListener,
 } from 'lexical'
+import { CompositionGate } from './composition'
 import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
-import { $exportMarkdown, $importMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
+import { $exportMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
+import { $replaceDocument, applyExternalValue, EXTERNAL_TAG } from './sync'
 import { registerTaskShortcut } from './task-shortcut'
 import { theme } from './theme'
 
-/** Marks updates the app makes itself (initial load, external value); they never reach `onChange`. */
-export const EXTERNAL_TAG = 'kept-external'
+export { EXTERNAL_TAG }
 
 export interface BodyEditor {
   insertText(s: string): void
@@ -61,6 +61,7 @@ export interface EditorCoreOptions {
 
 export interface EditorCore extends BodyEditor {
   editor: LexicalEditor
+  gate: CompositionGate
   setValue(markdown: string): void
   setReadOnly(readOnly: boolean, tasksToggleable: boolean): void
   destroy(): void
@@ -103,7 +104,7 @@ export const RichEditorExtension = defineExtension({
         }
       }),
       // Lexical skips shortcuts while an IME composition is active.
-      registerMarkdownShortcuts(editor, TRANSFORMERS),
+      registerMarkdownShortcuts(ignoreExternalUpdates(editor), TRANSFORMERS),
       registerTaskShortcut(editor),
       registerFormatKeys(editor),
       // A line break in a heading or list item exports as a soft break that reloads
@@ -127,6 +128,27 @@ export const RichEditorExtension = defineExtension({
 })
 
 /**
+ * Lexical's shortcut listener skips collaboration and history updates but not
+ * ours. After an external value the restored caret can sit right behind text such
+ * as `# `, which would turn into a heading. Update listeners registered through
+ * the returned editor do not see updates tagged `EXTERNAL_TAG`.
+ */
+function ignoreExternalUpdates(editor: LexicalEditor): LexicalEditor {
+  return new Proxy(editor, {
+    get(target, property) {
+      if (property === 'registerUpdateListener') {
+        return (listener: UpdateListener) =>
+          target.registerUpdateListener((payload) => {
+            if (!payload.tags.has(EXTERNAL_TAG)) listener(payload)
+          })
+      }
+      const value: unknown = Reflect.get(target, property, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+}
+
+/**
  * Calls `onChange` with the exported markdown after an update that changed it.
  * `state` holds the export of the loaded (or externally replaced) document, with
  * the seams recorded at that time; it moves to each new export that is emitted.
@@ -136,7 +158,7 @@ export const RichEditorExtension = defineExtension({
 function registerMarkdownChanges(
   editor: LexicalEditor,
   transformers: Transformer[],
-  state: { baseline: string; seams: ReadonlySet<string>; unsupported: boolean },
+  state: { baseline: string; seams: ReadonlySet<string>; unsupported: boolean; edits: number },
   onChange: (markdown: string) => void,
 ): () => void {
   return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves, tags }) => {
@@ -144,12 +166,14 @@ function registerMarkdownChanges(
     const markdown = editorState.read(() => $exportMarkdown(transformers, state.seams))
     if (markdown === state.baseline) return
     state.baseline = markdown
+    state.edits += 1
     onChange(markdown)
   })
 }
 
 export function createEditorCore(options: EditorCoreOptions, transformers: Transformer[] = TRANSFORMERS): EditorCore {
-  const state = { baseline: '', seams: new Set<string>() as ReadonlySet<string>, unsupported: false }
+  // `edits` counts emitted user changes, so a queued external value can tell it is stale.
+  const state = { baseline: '', seams: new Set<string>() as ReadonlySet<string>, unsupported: false, edits: 0 }
   const editor: LexicalEditorWithDispose = buildEditorFromExtensions(
     defineExtension({
       name: 'kept/editor-core',
@@ -163,10 +187,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
       onError: (error) => {
         throw error
       },
-      $initialEditorState: () => {
-        $importMarkdown(options.value, transformers)
-        if ($getRoot().isEmpty()) $getRoot().append($createParagraphNode())
-      },
+      $initialEditorState: () => $replaceDocument(options.value, transformers),
     }),
   )
   editor.setEditable(!options.readOnly)
@@ -200,18 +221,21 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
     }),
   ]
 
+  const gate = new CompositionGate(editor)
+
   return {
     editor,
+    gate,
     setValue(markdown) {
-      editor.update(
-        () => {
-          $importMarkdown(markdown, transformers)
-          if ($getRoot().isEmpty()) $getRoot().append($createParagraphNode())
+      applyExternalValue(editor, gate, markdown, {
+        transformers,
+        seams: () => state.seams,
+        edits: () => state.edits,
+        onReplaced(source) {
+          record(source)
+          syncEmpty()
         },
-        { tag: [HISTORY_MERGE_TAG, EXTERNAL_TAG], discrete: true },
-      )
-      record(markdown)
-      syncEmpty()
+      })
     },
     setReadOnly(readOnly) {
       editor.setEditable(!readOnly)
@@ -223,6 +247,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
     },
     destroy() {
       for (const off of unregister) off()
+      gate.dispose()
       editor.dispose()
     },
   }

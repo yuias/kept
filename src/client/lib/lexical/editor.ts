@@ -15,6 +15,11 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   }
   syncEditable(core.editor.isEditable())
   const stopEditable = core.editor.registerEditableListener(syncEditable)
+  // After Lexical's own handlers on the same events, so the composed text is committed first.
+  const begin = (): void => core.gate.begin()
+  const end = (): void => core.gate.end()
+  root.addEventListener('compositionstart', begin)
+  root.addEventListener('compositionend', end)
   return {
     insertText: (s) => core.insertText(s),
     replaceText: (token, s) => core.replaceText(token, s),
@@ -23,6 +28,8 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
     setReadOnly: (readOnly, tasksToggleable) => core.setReadOnly(readOnly, tasksToggleable),
     destroy() {
       stopEditable()
+      root.removeEventListener('compositionstart', begin)
+      root.removeEventListener('compositionend', end)
       core.editor.setRootElement(null)
       core.destroy()
     },

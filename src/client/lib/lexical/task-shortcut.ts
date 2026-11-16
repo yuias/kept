@@ -11,6 +11,7 @@ import {
   HISTORY_PUSH_TAG,
   type LexicalEditor,
 } from 'lexical'
+import { EXTERNAL_TAG } from './sync'
 
 /**
  * `- [ ] ` is typed as a bullet first (`- ` converts at once), so the stock check
@@ -21,7 +22,7 @@ import {
  */
 export function registerTaskShortcut(editor: LexicalEditor): () => void {
   return editor.registerUpdateListener(({ tags, editorState, prevEditorState }) => {
-    if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG) || editor.isComposing()) return
+    if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG) || tags.has(EXTERNAL_TAG) || editor.isComposing()) return
     const selection = editorState.read($getSelection)
     const previous = prevEditorState.read($getSelection)
     if (!$isRangeSelection(selection) || !$isRangeSelection(previous) || !selection.isCollapsed()) return
