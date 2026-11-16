@@ -27,6 +27,7 @@ import {
   type LexicalEditor,
   type LexicalEditorWithDispose,
 } from 'lexical'
+import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
 import { $exportMarkdown, $importMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
 
@@ -96,15 +97,17 @@ export const RichEditorExtension = defineExtension({
  * Calls `onChange` with the exported markdown after an update that changed it.
  * `state` holds the export of the loaded (or externally replaced) document, with
  * the seams recorded at that time; it moves to each new export that is emitted.
+ * While `unsupported` is set the document is not one the editor can keep, so
+ * nothing is emitted.
  */
 function registerMarkdownChanges(
   editor: LexicalEditor,
   transformers: Transformer[],
-  state: { baseline: string; seams: ReadonlySet<string> },
+  state: { baseline: string; seams: ReadonlySet<string>; unsupported: boolean },
   onChange: (markdown: string) => void,
 ): () => void {
   return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves, tags }) => {
-    if ((dirtyElements.size === 0 && dirtyLeaves.size === 0) || tags.has(EXTERNAL_TAG)) return
+    if ((dirtyElements.size === 0 && dirtyLeaves.size === 0) || tags.has(EXTERNAL_TAG) || state.unsupported) return
     const markdown = editorState.read(() => $exportMarkdown(transformers, state.seams))
     if (markdown === state.baseline) return
     state.baseline = markdown
@@ -113,7 +116,7 @@ function registerMarkdownChanges(
 }
 
 export function createEditorCore(options: EditorCoreOptions, transformers: Transformer[] = TRANSFORMERS): EditorCore {
-  const state = { baseline: '', seams: new Set<string>() as ReadonlySet<string> }
+  const state = { baseline: '', seams: new Set<string>() as ReadonlySet<string>, unsupported: false }
   const editor: LexicalEditorWithDispose = buildEditorFromExtensions(
     defineExtension({
       name: 'kept/editor-core',
@@ -136,11 +139,16 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
   editor.setEditable(!options.readOnly)
 
   // Seams are recorded in a read after the load commits, so node transforms have run.
-  const record = (): void => {
+  // The fidelity guard compares `source` with that same export. A note the editor
+  // would store differently must stay out of the formatted editor, so it is
+  // reported and the editor never emits for it.
+  const record = (source: string): void => {
     state.seams = editor.read($rootSeams)
     state.baseline = editor.read(() => $exportMarkdown(transformers, state.seams))
+    state.unsupported = classifyRoundTrip(source, state.baseline) === 'render-different'
+    if (state.unsupported) options.onUnsupported()
   }
-  record()
+  record(options.value)
 
   // Empty means the export is '', as with CodeMirror's placeholder; it follows `baseline`,
   // which every content update and `setValue` keeps current.
@@ -169,7 +177,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
         },
         { tag: [HISTORY_MERGE_TAG, EXTERNAL_TAG], discrete: true },
       )
-      record()
+      record(markdown)
       syncEmpty()
     },
     setReadOnly(readOnly) {

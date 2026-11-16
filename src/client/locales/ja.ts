@@ -111,6 +111,7 @@ export const ja: Messages = {
     formatFormatted: '整形表示',
     formatSyntax: 'シンタックス表示',
     formatDefault: (label: string) => `${label}（デフォルト）`,
+    formattedUnavailable: 'このノートには整形表示で保持できないマークダウンが含まれているため、テキストで表示しています。',
     pin: 'ピン留め',
     unpin: 'ピン留めを解除',
     lock: 'ノートをロック',

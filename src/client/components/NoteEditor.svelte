@@ -125,7 +125,10 @@
   // A failed chunk load (offline, stale deploy) falls back to the plain
   // textarea so the note stays editable.
   let liveLoadFailed = $state(false)
-  const showTextarea = $derived(effective === 'syntax' || liveLoadFailed)
+  // Set when the formatted editor reports a note it cannot round-trip; the
+  // textarea shows the stored text and nothing is saved unless the user edits it.
+  let richUnsupported = $state(false)
+  const showTextarea = $derived(effective === 'syntax' || liveLoadFailed || richUnsupported)
 
   // Temporary switch while the Lexical editor is developed; picked once per instance.
   const useLexical = (() => {
@@ -808,12 +811,16 @@
         onpaste={handlePaste}
         readonly={readOnly}
       ></textarea>
+      {#if richUnsupported && effective === 'formatted'}
+        <p class="note-editor-status">{m.editor.formattedUnavailable}</p>
+      {/if}
     {:else if LiveEditorComponent}
       <LiveEditorComponent
         bind:this={liveEl}
         bind:value={body}
         onchange={onBodyInput}
         onpaste={handlePaste}
+        onunsupported={() => (richUnsupported = true)}
         readonly={readOnly}
         tasksToggleable={!trashed}
         placeholder={m.editor.takeANote}

@@ -8,6 +8,8 @@ import {
   UNDO_COMMAND,
   type TextNode,
 } from 'lexical'
+import type { Transformer } from '@lexical/markdown'
+import { TableNode } from '@lexical/table'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEditorCore, EXTERNAL_TAG, type EditorCore, type EditorCoreOptions } from './core'
 import { $exportMarkdown, $rootSeams, roundTrip, TRANSFORMERS } from './markdown'
@@ -22,19 +24,22 @@ afterEach(() => {
   for (const core of open.splice(0)) core.destroy()
 })
 
-function create(value: string, overrides: Partial<EditorCoreOptions> = {}) {
+function create(value: string, overrides: Partial<EditorCoreOptions> = {}, transformers?: Transformer[]) {
   const onChange = vi.fn<(markdown: string) => void>()
   const onEmptyChange = vi.fn<(empty: boolean) => void>()
-  const core = createEditorCore({
-    value,
-    readOnly: false,
-    tasksToggleable: false,
-    onChange,
-    onPaste: () => {},
-    onUnsupported: () => {},
-    onEmptyChange,
-    ...overrides,
-  })
+  const core = createEditorCore(
+    {
+      value,
+      readOnly: false,
+      tasksToggleable: false,
+      onChange,
+      onPaste: () => {},
+      onUnsupported: () => {},
+      onEmptyChange,
+      ...overrides,
+    },
+    transformers,
+  )
   open.push(core)
   return { core, onChange, onEmptyChange }
 }
@@ -214,5 +219,58 @@ describe('first export', () => {
   it.each(sources)('equals the headless round trip of %s', (_name, source) => {
     const { core } = create(source)
     expect(exported(core)).toBe(roundTrip(source))
+  })
+})
+
+describe('fidelity guard', () => {
+  const table = '| a | b |\n| --- | --- |\n| 1 | 2 |'
+  // Without the table transformer a table is read as paragraphs, so it cannot be kept.
+  const withoutTable = TRANSFORMERS.filter(
+    (transformer) => !(transformer.type === 'multiline-element' && transformer.dependencies?.includes(TableNode)),
+  )
+
+  it('reports a note that does not survive the round trip, and emits nothing', async () => {
+    const onUnsupported = vi.fn()
+    const { core, onChange } = create(table, { onUnsupported }, withoutTable)
+    expect(onUnsupported).toHaveBeenCalledTimes(1)
+    type(core, '!')
+    await settle()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('checks the value given to setValue', () => {
+    const onUnsupported = vi.fn()
+    const { core } = create('x', { onUnsupported }, withoutTable)
+    expect(onUnsupported).not.toHaveBeenCalled()
+    core.setValue(table)
+    expect(onUnsupported).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits again when a later value is supported', async () => {
+    const { core, onChange } = create(table, {}, withoutTable)
+    core.setValue('x')
+    type(core, '!')
+    await settle()
+    expect(onChange.mock.calls).toEqual([['x!']])
+  })
+
+  it('accepts the same table with the full transformers', () => {
+    const onUnsupported = vi.fn()
+    create(table, { onUnsupported })
+    expect(onUnsupported).not.toHaveBeenCalled()
+  })
+
+  it('accepts a note that only differs in spelling', () => {
+    const onUnsupported = vi.fn()
+    create(normalizeIn.get('emphasis-underscore.in.md')!, { onUnsupported })
+    expect(onUnsupported).not.toHaveBeenCalled()
+  })
+
+  it('accepts a lazy continuation line', () => {
+    const onUnsupported = vi.fn()
+    const { core } = create('- a\nb', { onUnsupported })
+    core.setValue('x')
+    core.setValue('- a\nb')
+    expect(onUnsupported).not.toHaveBeenCalled()
   })
 })

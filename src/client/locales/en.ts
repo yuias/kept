@@ -119,6 +119,7 @@ export const en = {
     formatFormatted: 'Formatted',
     formatSyntax: 'Syntax',
     formatDefault: (label: string) => `${label} (default)`,
+    formattedUnavailable: 'This note uses markdown the formatted editor cannot keep, so it is shown as text.',
     pin: 'Pin note',
     unpin: 'Unpin note',
     lock: 'Lock note',
