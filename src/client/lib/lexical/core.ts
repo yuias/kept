@@ -14,22 +14,30 @@ import {
   autoLinkUrlMatcher,
   LinkExtension,
 } from '@lexical/link'
-import { CheckListExtension, ListExtension } from '@lexical/list'
-import type { Transformer } from '@lexical/markdown'
-import { RichTextExtension } from '@lexical/rich-text'
+import { $isListItemNode, CheckListExtension, ListExtension } from '@lexical/list'
+import { registerMarkdownShortcuts, type Transformer } from '@lexical/markdown'
+import { $isHeadingNode, RichTextExtension } from '@lexical/rich-text'
 import { TableExtension } from '@lexical/table'
+import { $getNearestBlockElementAncestorOrThrow, mergeRegister } from '@lexical/utils'
 import {
   $createParagraphNode,
   $getRoot,
+  $getSelection,
+  $isRangeSelection,
   $isTextNode,
+  COMMAND_PRIORITY_HIGH,
   HISTORY_MERGE_TAG,
+  INSERT_LINE_BREAK_COMMAND,
+  INSERT_PARAGRAPH_COMMAND,
   TextNode,
   type LexicalEditor,
   type LexicalEditorWithDispose,
 } from 'lexical'
 import { classifyRoundTrip } from './fidelity'
 import { MarkdownNodesExtension } from './extension'
+import { registerFormatKeys } from './format'
 import { $exportMarkdown, $importMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
+import { registerTaskShortcut } from './task-shortcut'
 
 /** Marks updates the app makes itself (initial load, external value); they never reach `onChange`. */
 export const EXTERNAL_TAG = 'kept-external'
@@ -77,20 +85,43 @@ export const RichEditorExtension = defineExtension({
     CodeExtension,
   ],
   register: (editor) =>
-    // An auto link around inline code would render as a link inside code. Unlinking
-    // (rather than unwrapping) keeps the auto-link transform from re-creating it.
-    // Registered on TextNode because a format change dirties only the text node,
-    // and element transforms skip elements that are dirty only through a child.
-    editor.registerNodeTransform(TextNode, (node) => {
-      const parent = node.getParent()
-      if (
-        $isAutoLinkNode(parent) &&
-        !parent.getIsUnlinked() &&
-        parent.getChildren().every((child) => $isTextNode(child) && child.hasFormat('code'))
-      ) {
-        parent.setIsUnlinked(true)
-      }
-    }),
+    mergeRegister(
+      // An auto link around inline code would render as a link inside code. Unlinking
+      // (rather than unwrapping) keeps the auto-link transform from re-creating it.
+      // Registered on TextNode because a format change dirties only the text node,
+      // and element transforms skip elements that are dirty only through a child.
+      editor.registerNodeTransform(TextNode, (node) => {
+        const parent = node.getParent()
+        if (
+          $isAutoLinkNode(parent) &&
+          !parent.getIsUnlinked() &&
+          parent.getChildren().every((child) => $isTextNode(child) && child.hasFormat('code'))
+        ) {
+          parent.setIsUnlinked(true)
+        }
+      }),
+      // Lexical skips shortcuts while an IME composition is active.
+      registerMarkdownShortcuts(editor, TRANSFORMERS),
+      registerTaskShortcut(editor),
+      registerFormatKeys(editor),
+      // A line break in a heading or list item exports as a soft break that reloads
+      // as a separate root paragraph, so it splits the block like Enter does. Some
+      // Android keyboards report plain Enter as a line break.
+      editor.registerCommand(
+        INSERT_LINE_BREAK_COMMAND,
+        () => {
+          const selection = $getSelection()
+          if (!$isRangeSelection(selection)) return false
+          // Both ends: a backward range merges into the block of its focus.
+          const inBlock = [selection.anchor, selection.focus].some((point) => {
+            const block = $getNearestBlockElementAncestorOrThrow(point.getNode())
+            return $isHeadingNode(block) || $isListItemNode(block)
+          })
+          return inBlock && editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined)
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    ),
 })
 
 /**
