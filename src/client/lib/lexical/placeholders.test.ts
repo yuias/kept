@@ -6,13 +6,16 @@ import {
   $isRangeSelection,
   $isTextNode,
   $setSelection,
+  COMMAND_PRIORITY_NORMAL,
   PASTE_COMMAND,
   UNDO_COMMAND,
   type ElementNode,
+  type TextNode,
 } from 'lexical'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { $exportMarkdown, $rootSeams, roundTrip, TRANSFORMERS } from './markdown'
+import { $pasteMarkdown } from './placeholders'
 import { $createImageNode, $isImageNode } from './nodes/image-node'
 
 const TOKEN = '![uploading-00000000-0000-0000-0000-000000000000]()'
@@ -380,5 +383,172 @@ describe('image target', () => {
     core.replaceText(TOKEN, markdown)
     const once = exported(core)
     expect(roundTrip(once)).toBe(once)
+  })
+})
+
+describe('plain-text paste', () => {
+  const clipboardEvent = (data: Record<string, string>) => {
+    const event = {
+      defaultPrevented: false,
+      preventDefault: () => void (event.defaultPrevented = true),
+      clipboardData: { getData: (type: string) => data[type] ?? '' },
+    }
+    return event as unknown as ClipboardEvent
+  }
+  const paste = (core: EditorCore, text: string): boolean => core.editor.dispatchCommand(PASTE_COMMAND, clipboardEvent({ 'text/plain': text }))
+  /** A new editor whose caret is at the end of its content, as in a focused editor. */
+  const createWithCaret = (value: string) => {
+    const created = create(value)
+    created.core.editor.update(() => void $getRoot().selectEnd(), { discrete: true })
+    created.onChange.mockClear()
+    return created
+  }
+  const caret = (core: EditorCore) =>
+    core.editor.read(() => {
+      const selection = $getSelection()
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()) throw new Error('no caret')
+      const node = selection.anchor.getNode()
+      return { text: node.getTextContent(), offset: selection.anchor.offset, block: node.getTopLevelElementOrThrow().getTextContent() }
+    })
+
+  /** What `onChange` last received, i.e. what would be saved. The read commits a pending update first. */
+  const saved = (core: EditorCore, onChange: ReturnType<typeof create>['onChange']): string | undefined => {
+    core.editor.read(() => undefined)
+    return onChange.mock.lastCall?.[0]
+  }
+  const types = (core: EditorCore): string[] => core.editor.read(() => $getRoot().getChildren().map((child) => child.getType()))
+
+  it('reads markdown into blocks', () => {
+    const { core, onChange } = createWithCaret('')
+    expect(paste(core, '**a**\r\nb')).toBe(true)
+    expect(saved(core, onChange)).toBe('**a**\nb')
+    expect(types(core)).toEqual(['paragraph', 'paragraph'])
+    expect(core.editor.read(() => ($getRoot().getFirstChild() as ElementNode).getFirstChild()?.getTextContent())).toBe('a')
+    expect(core.editor.read(() => (($getRoot().getFirstChild() as ElementNode).getFirstChild() as TextNode).hasFormat('bold'))).toBe(true)
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('turns headings and lists into blocks', () => {
+    const { core, onChange } = createWithCaret('')
+    paste(core, '# h\n- a\n- b')
+    expect(types(core)).toEqual(['heading', 'list'])
+    expect(saved(core, onChange)).toBe('# h\n- a\n- b')
+  })
+
+  it('inserts the text literally inside a code block, with LF', () => {
+    const { core, onChange } = create('```\nx\n```')
+    core.editor.update(() => void ($getRoot().getFirstChild() as ElementNode).selectEnd(), { discrete: true })
+    onChange.mockClear()
+    expect(paste(core, '**a**\r\nb\n# c')).toBe(true)
+    expect(saved(core, onChange)).toBe('```\nx**a**\nb\n# c\n```')
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(types(core)).toEqual(['code'])
+  })
+
+  it('does not add a block for a trailing line break', () => {
+    const { core, onChange } = createWithCaret('')
+    paste(core, 'a\n')
+    expect(saved(core, onChange)).toBe('a')
+    expect(types(core)).toEqual(['paragraph'])
+  })
+
+  it('leaves no CR in what is saved', () => {
+    const { core, onChange } = createWithCaret('')
+    paste(core, 'a\r\nb\rc\r\n\r\n# d\r\n')
+    expect(saved(core, onChange)).not.toContain('\r')
+  })
+
+  it('is its own undo step, apart from the typing before it', () => {
+    const { core } = create('abcd')
+    placeCaret(core, 0, 2)
+    type(core, 'X')
+    paste(core, '# h\n- a')
+    expect(exported(core)).not.toBe('abXcd')
+    core.editor.dispatchCommand(UNDO_COMMAND, undefined)
+    expect(exported(core)).toBe('abXcd')
+    core.editor.dispatchCommand(UNDO_COMMAND, undefined)
+    expect(exported(core)).toBe('abcd')
+  })
+
+  it('emits once and leaves the caret after the pasted content', () => {
+    const { core, onChange } = createWithCaret('')
+    paste(core, '# h\n- a')
+    expect(saved(core, onChange)).toBe('# h\n- a')
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const { text, offset } = caret(core)
+    expect(text).toBe('a')
+    expect(offset).toBe(1)
+    type(core, 'X')
+    expect(exported(core)).toBe('# h\n- aX')
+  })
+
+  it('splits the paragraph around the caret for several lines', () => {
+    const { core, onChange } = create('abcd')
+    placeCaret(core, 0, 2)
+    paste(core, 'x\ny')
+    expect(saved(core, onChange)).toBe('abx\nycd')
+    expect(caret(core)).toEqual({ text: 'ycd', offset: 1, block: 'ycd' })
+  })
+
+  it('merges the first block into the paragraph around the caret, as Lexical does for HTML', () => {
+    const { core, onChange } = create('abcd')
+    placeCaret(core, 0, 2)
+    paste(core, '# h\n- a')
+    expect(saved(core, onChange)).toBe('abh\n- a\n\ncd')
+  })
+
+  it('merges one line into the paragraph around the caret', () => {
+    const { core, onChange } = create('abcd')
+    placeCaret(core, 0, 2)
+    paste(core, '**x** y')
+    expect(types(core)).toEqual(['paragraph'])
+    expect(saved(core, onChange)).toBe('ab**x** ycd')
+    expect(caret(core).block).toBe('abx ycd')
+    type(core, 'Z')
+    expect(exported(core)).toBe('ab**x** yZcd')
+  })
+
+  it.each([' x ', ' ', 'x '])('keeps the edge spaces of one pasted line: %j', (text) => {
+    const { core, onChange } = create('abcd')
+    placeCaret(core, 0, 2)
+    paste(core, text)
+    expect(saved(core, onChange)).toBe(`ab${text}cd`)
+  })
+
+  it('replaces a selected range', () => {
+    const { core } = create('abcd')
+    core.editor.update(() => void (($getRoot().getFirstChild() as ElementNode).getFirstChild() as TextNode).select(1, 3), { discrete: true })
+    paste(core, 'X')
+    expect(exported(core)).toBe('aXd')
+  })
+
+  it('leaves clipboards with HTML or Lexical data, and table cells, to Lexical', () => {
+    const { core } = create('a\n\n| h |\n| --- |\n| c |')
+    const taken = (event: ClipboardEvent): boolean => {
+      let result = false
+      core.editor.update(() => void (result = $pasteMarkdown(event, TRANSFORMERS)), { discrete: true })
+      return result
+    }
+    placeCaret(core, 0, 1)
+    expect(taken(clipboardEvent({ 'text/plain': '# a', 'text/html': '<h1>a</h1>' }))).toBe(false)
+    expect(taken(clipboardEvent({ 'text/plain': '# a', 'application/x-lexical-editor': '{}' }))).toBe(false)
+    expect(taken(clipboardEvent({}))).toBe(false)
+    expect(taken(clipboardEvent({ 'text/plain': '\r\n' }))).toBe(false)
+    core.editor.update(() => void ($getRoot().getLastChild() as ElementNode).getFirstDescendant()!.selectStart(), { discrete: true })
+    expect(taken(clipboardEvent({ 'text/plain': '# a' }))).toBe(false)
+    expect(exported(core)).toBe('a\n\n| h |\n| --- |\n| c |')
+  })
+
+  it('does not read a clipboard while a composition is active', () => {
+    const { core } = create('abcd')
+    placeCaret(core, 0, 2)
+    const event = clipboardEvent({ 'text/plain': '# h' })
+    vi.spyOn(core.gate, 'active', 'get').mockReturnValue(true)
+    // Stands in for Lexical's own handler, which needs a DOM.
+    const fallback = vi.fn(() => true)
+    core.editor.registerCommand(PASTE_COMMAND, fallback, COMMAND_PRIORITY_NORMAL)
+    core.editor.dispatchCommand(PASTE_COMMAND, event)
+    expect(fallback).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(false)
   })
 })

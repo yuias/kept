@@ -39,7 +39,7 @@ import { MarkdownNodesExtension } from './extension'
 import { registerFormatKeys } from './format'
 import { $exportMarkdown, $rootSeams, TRANSFORMERS } from './markdown'
 import { linkNodeReplacements } from './nodes/link-nodes'
-import { createPlaceholderOps } from './placeholders'
+import { $pasteMarkdown, createPlaceholderOps } from './placeholders'
 import { $replaceDocument, applyExternalValue, EXTERNAL_TAG } from './sync'
 import { registerTaskShortcut } from './task-shortcut'
 import { theme } from './theme'
@@ -233,7 +233,13 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
         // `clipboardData`; the callback only reads it, so it sees no files then.
         options.onPaste(event as ClipboardEvent)
         // A pasted image wins: its clipboard may carry the file name as text too.
-        return event.defaultPrevented || urlPaste.paste(event as ClipboardEvent)
+        if (event.defaultPrevented) return true
+        // Then a lone URL, then plain text as markdown; anything else is Lexical's.
+        const clipboardEvent = event as ClipboardEvent
+        return (
+          urlPaste.paste(clipboardEvent) ||
+          (!gate.active && editor.isEditable() && $pasteMarkdown(clipboardEvent, transformers))
+        )
       },
       COMMAND_PRIORITY_HIGH,
     ),

@@ -1,7 +1,9 @@
 import { $isCodeNode } from '@lexical/code-core'
 import { $generateNodesFromMarkdownString, type Transformer } from '@lexical/markdown'
+import { $isTableCellNode } from '@lexical/table'
 import { $dfs, $findMatchingParent } from '@lexical/utils'
 import {
+  $addUpdateTag,
   $createParagraphNode,
   $createRangeSelection,
   $getRoot,
@@ -13,12 +15,14 @@ import {
   $isTextNode,
   $setSelection,
   HISTORY_PUSH_TAG,
+  PASTE_TAG,
   SKIP_DOM_SELECTION_TAG,
   type LexicalEditor,
   type LexicalNode,
   type RangeSelection,
   type TextNode,
 } from 'lexical'
+import { toLf } from '../line-endings'
 import type { CompositionGate } from './composition'
 import { $isImageNode, type ImageNode } from './nodes/image-node'
 import { isBlurred } from './sync'
@@ -67,6 +71,36 @@ export function $insertMarkdown(markdown: string, transformers: Transformer[]): 
   }
   const nodes = $nodesOf(markdown, transformers)
   if (nodes.length > 0) selection.insertNodes(nodes)
+}
+
+/**
+ * Pastes clipboard text as markdown over the selection, in place of Lexical's
+ * plain-text paste. Clipboards with HTML or Lexical's own data are left to Lexical
+ * (false), as are table cells (they hold inline content only, which block markdown
+ * would break) and clipboards without text. Inside a code block the text goes in as it
+ * is, line breaks included. CR and CRLF become LF first. Call inside the paste command.
+ */
+export function $pasteMarkdown(event: ClipboardEvent, transformers: Transformer[]): boolean {
+  const data = event.clipboardData
+  const selection = $getSelection()
+  if (!data || !$isRangeSelection(selection)) return false
+  if (data.getData('text/html') !== '' || data.getData('application/x-lexical-editor') !== '') return false
+  const text = toLf(data.getData('text/plain'))
+  if (text === '') return false
+  const nodes = [selection.anchor, selection.focus].map((point) => point.getNode())
+  if (nodes.some((node) => $findMatchingParent(node, $isTableCellNode))) return false
+  const inCode = nodes.some((node) => $findMatchingParent(node, $isCodeNode))
+  // A copied line usually ends in a line break, which would leave an empty paragraph behind.
+  const line = text.replace(/\n+$/, '')
+  // Nothing but line breaks: Lexical's own paste turns them into paragraphs.
+  if (!inCode && line === '') return false
+  const imported = inCode ? [] : $nodesOf(line, transformers)
+  event.preventDefault()
+  // Its own undo step, like Lexical's own paste.
+  $addUpdateTag(PASTE_TAG)
+  if (inCode) selection.insertRawText(text)
+  else selection.insertNodes(imported)
+  return true
 }
 
 /** Replaces the placeholder `token` with `markdown`, or removes it when `markdown` is empty. False when it is gone. */

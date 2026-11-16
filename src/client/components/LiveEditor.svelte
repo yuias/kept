@@ -18,7 +18,7 @@
   import { liveDecorations, liveTheme } from '../lib/live/decorations'
   import { formatKeys } from '../lib/live/format'
   import { cardLabels, cardTheme, linkCards } from '../lib/live/link-cards'
-  import { toLf } from '../lib/live/line-endings'
+  import { toLf } from '../lib/line-endings'
   import { linkPaste, pasteLabels } from '../lib/live/link-paste'
   import { linkClicks } from '../lib/live/links'
   import { minimalChange } from '../lib/live/sync'
