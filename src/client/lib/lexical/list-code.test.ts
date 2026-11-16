@@ -62,6 +62,29 @@ describe('fenced code inside list items', () => {
   })
 })
 
+describe('lines between a list and its fence', () => {
+  it.each([
+    ['a whitespace-only line', '- item\n  \n    ```\n    x\n    ```\n'],
+    ['a tab-only line', '- item\n\t\n    ```\n    x\n    ```\n'],
+    ['a paragraph indented as far as the fence', '- item\n    more\n    ```\n    x\n    ```\n'],
+    ['a paragraph indented further than the fence', '- item\n      more\n    ```\n    x\n    ```\n'],
+    ['an empty line and an indented paragraph', '- item\n\n    more\n\n    ```\n    x\n    ```\n'],
+    ['a fence after a nested list', '- item\n    - nested\n  \n    ```\n    x\n    ```\n'],
+  ])('keeps the indent behind %s', (_name, source) => {
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it('does not keep the indent behind a paragraph that is indented less than the fence', () => {
+    expect(roundTrip('- item\n\n  more\n    ```\n    x\n    ```\n')).toBe('- item\n\n  more\n```\nx\n```\n')
+    expect(roundTrip('- item\n\ntext\n    ```\n    x\n    ```\n')).toBe('- item\n\ntext\n```\nx\n```\n')
+  })
+
+  it('keeps the empty lines before the closing fence together with the indent', () => {
+    const source = '- item\n\n    ```\n    x\n\n    ```\n'
+    expect(roundTrip(source)).toBe(source)
+  })
+})
+
 describe('fenced code that was not inside a list', () => {
   it('has no indent for a code block built after a list in the editor', () => {
     const editor = createMarkdownEditor()

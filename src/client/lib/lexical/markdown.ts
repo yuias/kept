@@ -2,10 +2,11 @@ import { buildEditorFromExtensions } from '@lexical/extension'
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
-  CHECK_LIST,
   CODE,
   HIGHLIGHT,
   LINK,
+  ORDERED_LIST,
+  QUOTE,
   setPlainTextEscaper,
   TRANSFORMERS as STOCK_TRANSFORMERS,
   UNORDERED_LIST,
@@ -31,11 +32,23 @@ import {
   type LexicalNode,
   type TextNode,
 } from 'lexical'
-import { type Edge, escapePlainText } from './escape'
+import { type Edge, escapeLineStart, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
 import { $isCardNode } from './nodes/card-node'
 import { createTableTransformer, isTableStart } from './table-transformer'
-import { CARD, CODE_SPAN, IMAGE, INDENTED_CODE, KEPT_LINK, PARAGRAPH_LINE_START, RULE } from './transformers'
+import {
+  CARD,
+  CODE_SPAN,
+  IMAGE,
+  INDENTED_CODE,
+  KEPT_CHECK_LIST,
+  KEPT_LINK,
+  KEPT_ORDERED_LIST,
+  KEPT_QUOTE,
+  KEPT_UNORDERED_LIST,
+  PARAGRAPH_LINE_START,
+  RULE,
+} from './transformers'
 
 // Cells hold inline markup only, so the table reads them with the inline transformers.
 const TABLE = createTableTransformer(() => TRANSFORMERS)
@@ -46,7 +59,9 @@ export const TRANSFORMERS: Transformer[] = [
   ...STOCK_TRANSFORMERS.filter((transformer) => transformer !== HIGHLIGHT).flatMap((transformer) => {
     if (transformer === LINK) return [IMAGE, KEPT_LINK]
     // The rule and the check list read lines the list transformers would take.
-    if (transformer === UNORDERED_LIST) return [RULE, CHECK_LIST, transformer]
+    if (transformer === UNORDERED_LIST) return [RULE, KEPT_CHECK_LIST, KEPT_UNORDERED_LIST]
+    if (transformer === ORDERED_LIST) return [KEPT_ORDERED_LIST]
+    if (transformer === QUOTE) return [KEPT_QUOTE]
     return transformer === CODE ? [INDENTED_CODE, TABLE] : [transformer]
   }),
   CARD,
@@ -119,6 +134,15 @@ setPlainTextEscaper((text, node) => {
       const at = head[0].indexOf('[')
       escaped = `${escaped.slice(0, at)}\\${escaped.slice(at)}`
     }
+  }
+  // GFM reads `- - x` as a nested list and `- > x` as a quote, while the importer keeps the
+  // rest of the line as text. Escaping makes both agree. The stock `1\. ` escape of
+  // bullet items is left to this code too: it no longer matches the escaped text.
+  if (!own && !node.getPreviousSibling() && $isListItemNode(node.getParent())) {
+    const next = edge(node.getNextSibling(), false)
+    const tail = typeof next === 'string' ? next : ''
+    const line = escapeLineStart(escaped + tail, { thematicBreak: true, tableRow: false, listItem: true })
+    escaped = line.slice(0, line.length - tail.length)
   }
   // The table reads `<br>` in a cell as a line break, so typed `<br>` text needs its `<` escaped.
   if (/<br/i.test(escaped) && node.getParents().some($isTableCellNode)) escaped = escaped.replace(/<(?=br\s*\/?>)/gi, '\\<')

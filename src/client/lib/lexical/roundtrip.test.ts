@@ -5,7 +5,7 @@ import { $createParagraphNode, $createTextNode, $getRoot, type LexicalNode } fro
 import { describe, expect, it } from 'vitest'
 import { classifyRoundTrip } from './fidelity'
 import { $exportMarkdown, $importMarkdown, createMarkdownEditor, roundTrip } from './markdown'
-import { FENCED_CODE } from './transformers'
+import { FENCED_CODE, KEPT_QUOTE } from './transformers'
 
 const load = (files: Record<string, string>, suffix: string): Map<string, string> =>
   new Map(
@@ -175,6 +175,27 @@ describe('fences', () => {
     expect(rootShape('```\n~~~\n```')).toEqual([['code', '', '~~~']])
   })
 
+  it('keeps the empty lines before the closing fence', () => {
+    expect(rootShape('```\na\n\n\n```')).toEqual([['code', '', 'a\n\n']])
+    expect(roundTrip('```ts\nb\n\n```')).toBe('```ts\nb\n\n```')
+    expect(roundTrip('~~~\nc\n\n~~~')).toBe('```\nc\n\n```')
+    expect(roundTrip('``` x\n\n```')).toBe('```\nx\n\n```')
+  })
+
+  it('writes a block of empty lines back as it was read', () => {
+    expect(rootShape('```\n\n\n```')).toEqual([['code', '', '\n']])
+    expect(roundTrip('```\n\n\n```')).toBe('```\n\n\n```')
+    expect(roundTrip('```\n\n\n\n```')).toBe('```\n\n\n\n```')
+    // One empty line and none are the same code text, so the bytes of the first are not kept.
+    expect(roundTrip('```\n\n```')).toBe('```\n```')
+  })
+
+  it('puts back no empty line into a fence that is not closed', () => {
+    expect(rootShape('```\nx\n\n')).toEqual([['code', '', 'x']])
+    expect(rootShape('```\nx\n\n~~~')).toEqual([['code', '', 'x\n\n~~~']])
+    expect(rootShape('````\nx\n\n```')).toEqual([['code', '', 'x\n\n```']])
+  })
+
   it('keeps the fence line leading whitespace in capture group 1', () => {
     expect(FENCED_CODE.regExpStart.exec('  ~~~js')![1]).toBe('  ~~~')
     expect(FENCED_CODE.regExpStart.exec('\t```')![1]).toBe('\t```')
@@ -196,6 +217,15 @@ describe('typed text that looks like a block', () => {
     '~~~',
     '~~~js',
     '  ~~~~',
+    // Only spaces and tabs indent a list marker, so these are paragraph text.
+    '\u3000- x',
+    '\u3000* x',
+    '\u30001. x',
+    '\u30001) x',
+    '\u3000[ ] x',
+    '1) x',
+    '>x',
+    '>',
   ]
 
   it.each(lines)('stays one paragraph: %j', (line) => {
@@ -226,5 +256,50 @@ describe('rule nodes made in the editor', () => {
       'horizontalrule',
       ['paragraph', '[ ] b'],
     ])
+  })
+})
+
+describe('lines the importer reads like GFM does', () => {
+  it.each(['\u3000- x', '\u3000* x', '\u30001. x', '\u3000\u3000- x'])('reads %j as a paragraph', (line) => {
+    expect(rootShape(line)).toEqual([['paragraph', line]])
+    expect(roundTrip(line)).toBe(line)
+  })
+
+  it.each(['\t- x', '  - x'])('still reads %j as a list item', (line) => {
+    expect(rootShape(line)).toEqual([['bullet', 'x']])
+  })
+
+  it('reads `1)` as an ordered item and writes `1.`', () => {
+    expect(rootShape('1) a\n2) b')).toEqual([['number', 'a', 'b']])
+    expect(roundTrip('1) a\n2) b')).toBe('1. a\n2. b')
+    expect(rootShape('3) a')).toEqual([['number', 'a']])
+  })
+
+  it.each([
+    ['>x', [['quote', 'x']], '> x'],
+    ['>>x', [['quote', '>x']], '> >x'],
+    ['a\n>b\n>c', [['paragraph', 'a'], ['quote', 'b\nc']], 'a\n> b\n> c'],
+    ['> a\n>\n> b', [['quote', 'a\n\nb']], '> a\n> \n> b'],
+  ])('reads %j as a quote', (source, shape, written) => {
+    expect(rootShape(source)).toEqual(shape)
+    expect(roundTrip(source)).toBe(written)
+    expect(roundTrip(written)).toBe(written)
+  })
+
+  it('leaves a lone `>` to the shortcut as a paragraph', () => {
+    const editor = createMarkdownEditor()
+    let result: unknown
+    editor.update(
+      () => {
+        const paragraph = $createParagraphNode().append($createTextNode('>'))
+        $getRoot().clear().append(paragraph)
+        // Enter after a lone `>` runs the transformer with the match `>`; a typed `> ` has the space.
+        result = [KEPT_QUOTE.replace(paragraph, [], ['>'], false), KEPT_QUOTE.regExp.exec('> ')![0]]
+      },
+      { discrete: true },
+    )
+    expect(result).toEqual([false, '> '])
+    expect(editor.read(() => $getRoot().getFirstChild()!.getType())).toBe('paragraph')
+    editor.dispose()
   })
 })

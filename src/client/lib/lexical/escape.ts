@@ -131,6 +131,11 @@ export interface LineStartBlocks {
   thematicBreak: boolean
   /** The line starts with `|` and the importer would read it as part of a table (`isTableStart`); another `|` line is plain text. */
   tableRow: boolean
+  /**
+   * The line is the first text of a list item, written after a `-` or `*` marker. The importer
+   * reads no card, table or task marker there, and a rule can be made with the marker itself (`- --`).
+   */
+  listItem?: boolean
 }
 
 /**
@@ -139,26 +144,29 @@ export interface LineStartBlocks {
  * only count while the importer turns them into blocks (`blocks`); before
  * that, such a line is an ordinary paragraph and must keep its bytes. The
  * importer reads `\s` after a marker (tab and U+3000 included) and any number
- * of digits, so the patterns follow it where it is wider than CommonMark.
+ * of digits, but only spaces and tabs before a list marker, so the patterns
+ * follow it where it is wider than CommonMark.
  */
 export function escapeLineStart(
   line: string,
   blocks: LineStartBlocks = { thematicBreak: true, tableRow: true },
 ): string {
   const insertAt = (index: number): string => `${line.slice(0, index)}\\${line.slice(index)}`
-  const indent = /^\s*/.exec(line)?.[0].length ?? 0
+  const indent = /^[ \t]*/.exec(line)![0].length
   const rest = line.slice(indent)
 
-  if (/^(?:[-+*]\s|\d+\.\s|\d{1,9}[.)](?: |$))/.test(rest)) {
+  if (/^(?:[-+*]\s|\d+[.)]\s|\d{1,9}[.)]$)/.test(rest)) {
     return insertAt(indent + (/^[-+*]/.test(rest) ? 0 : /^\d+/.exec(rest)![0].length))
   }
   // The check list pattern makes its `- ` marker optional, so `[ ] x` alone is a task item.
-  if (/^\s*\[(?:\s|x)?\]\s/i.test(line)) return insertAt(indent)
+  const task = blocks.listItem ? null : /^[ \t]*\s?\[(?:\s|x)?\]\s/i.exec(line)
+  if (task) return insertAt(task[0].indexOf('['))
   if (/^(?:#{1,6}(?:\s|$)|>)/.test(line) || (blocks.tableRow && line.startsWith('|'))) return insertAt(0)
   // The importer opens a code block on any line that starts with three backticks.
   const fenceIndent = /^[ \t]*(?:`{3,}|~{3,})/.test(line) ? /^[ \t]*/.exec(line)![0].length : -1
   if (fenceIndent >= 0) return insertAt(fenceIndent)
   // `@` + a link typed in the editor writes a card line, which the importer turns into a card.
-  if (parseCardLine(line) !== null) return insertAt(0)
-  return blocks.thematicBreak && THEMATIC_BREAK.test(line) ? insertAt(indent) : line
+  if (!blocks.listItem && parseCardLine(line) !== null) return insertAt(0)
+  const rule = THEMATIC_BREAK.test(line) || (blocks.listItem === true && (THEMATIC_BREAK.test(`- ${line}`) || THEMATIC_BREAK.test(`* ${line}`)))
+  return blocks.thematicBreak && rule ? insertAt(indent) : line
 }

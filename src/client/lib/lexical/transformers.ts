@@ -3,8 +3,12 @@ import { $createHorizontalRuleNode, $isHorizontalRuleNode, HorizontalRuleNode } 
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
 import { $isListNode } from '@lexical/list'
 import {
+  CHECK_LIST,
   CODE,
   LINK,
+  ORDERED_LIST,
+  QUOTE,
+  UNORDERED_LIST,
   type ElementTransformer,
   type MultilineElementTransformer,
   type TextMatchTransformer,
@@ -201,9 +205,49 @@ export const RULE: ElementTransformer = {
   type: 'element',
 }
 
+// Only spaces and tabs indent a list item. The stock patterns read any `\s` before
+// the marker, so a line that starts with U+3000 became a list item although GFM
+// reads a paragraph. Capture groups stay as in the stock patterns.
+export const KEPT_UNORDERED_LIST: ElementTransformer = { ...UNORDERED_LIST, regExp: /^([ \t]*)[-*+]\s/ }
+export const KEPT_CHECK_LIST: ElementTransformer = { ...CHECK_LIST, regExp: /^([ \t]*)(?:[-*+]\s)?\s?(\[(\s|x)?\])\s/i }
+// `1)` is an ordered item in GFM too. It is written back as `1.`.
+export const KEPT_ORDERED_LIST: ElementTransformer = { ...ORDERED_LIST, regExp: /^([ \t]*)(\d{1,})[.)]\s/ }
+
+/**
+ * `>x` without a space is a quote in GFM. Import reads it; the export writes
+ * `> x`. The shortcut still needs the space, so that Enter after a lone `>`
+ * does not open a quote.
+ */
+export const KEPT_QUOTE: ElementTransformer = {
+  ...QUOTE,
+  regExp: /^>\s?/,
+  replace: (parentNode, children, match, isImport) =>
+    isImport || /\s$/.test(match[0]!) ? QUOTE.replace(parentNode, children, match, isImport) : false,
+}
+
 // Group 1 is the fence line's leading whitespace plus the fence, as in the
 // stock `CODE` transformer, which the callers of this one read.
 const FENCE_START = /^([ \t]*(?:`{3,}|~{3,}))([\w-]+)?[ \t]?/
+
+/**
+ * The stock importer, then the empty lines right before the closing fence put
+ * back into the code: the stock `replace` drops them, which changes the bytes
+ * of the block. A block with no other content loses one line less, because the
+ * lines are the separators between its empty lines.
+ */
+const importCode: NonNullable<MultilineElementTransformer['handleImportAfterStartMatch']> = (args) => {
+  const { lines, rootNode, startLineIndex, startMatch } = args
+  const result = CODE.handleImportAfterStartMatch!(args)
+  const end = result?.[1] ?? -1
+  const closer = new RegExp(`^[ \\t]*\`{${startMatch[1]!.trim().length},}$`)
+  const code = rootNode.getLastChild()
+  const text = $isCodeNode(code) ? code.getFirstChild() : null
+  if (end <= startLineIndex || !closer.test(lines[end]!) || !$isTextNode(text)) return result
+  let empty = 0
+  while (empty < end - startLineIndex - 1 && lines[end - 1 - empty] === '') empty++
+  if (empty > 0) text.setTextContent(text.getTextContent() + '\n'.repeat(text.getTextContent() === '' ? empty - 1 : empty))
+  return result
+}
 
 /**
  * The stock `CODE` transformer, plus `~~~` fences. A tilde fence is imported
@@ -216,7 +260,7 @@ export const FENCED_CODE: MultilineElementTransformer = {
   handleImportAfterStartMatch: (args) => {
     const { lines, startLineIndex, startMatch } = args
     const opening = startMatch[1]!.trim()
-    if (!opening.startsWith('~')) return CODE.handleImportAfterStartMatch!(args)
+    if (!opening.startsWith('~')) return importCode(args)
 
     const indent = startMatch[1]!.slice(0, startMatch[1]!.length - opening.length)
     const closing = new RegExp(`^[ \\t]*~{${opening.length},}[ \\t]*$`)
@@ -229,7 +273,7 @@ export const FENCED_CODE: MultilineElementTransformer = {
     const rewritten = [...lines]
     rewritten[startLineIndex] = indent + fence + lines[startLineIndex]!.slice(indent.length + opening.length)
     if (closingIndex !== -1) rewritten[closingIndex] = indent + fence
-    return CODE.handleImportAfterStartMatch!({ ...args, lines: rewritten, startMatch: rewritten[startLineIndex]!.match(FENCE_START)! })
+    return importCode({ ...args, lines: rewritten, startMatch: rewritten[startLineIndex]!.match(FENCE_START)! })
   },
   regExpStart: FENCE_START,
 }
@@ -239,9 +283,15 @@ export const fenceIndentState = createState('keptFenceIndent', {
   parse: (value) => (typeof value === 'string' && /^[ \t]*$/.test(value) ? value : ''),
 })
 
-const $previousNonEmpty = (node: LexicalNode): LexicalNode | null => {
+// Lines that sit between a list and its fence without ending the list item: empty
+// or whitespace-only lines, and text indented at least as far as the fence.
+const $previousNonEmpty = (node: LexicalNode, indent: string): LexicalNode | null => {
   let previous = node.getPreviousSibling()
-  while ($isParagraphNode(previous) && previous.getTextContentSize() === 0) previous = previous.getPreviousSibling()
+  while ($isParagraphNode(previous)) {
+    const text = previous.getTextContent()
+    if (text.trim() !== '' && /^[ \t]*/.exec(text)![0].length < indent.length) break
+    previous = previous.getPreviousSibling()
+  }
   return previous
 }
 
@@ -258,14 +308,14 @@ export const INDENTED_CODE: MultilineElementTransformer = {
     const handled = FENCED_CODE.handleImportAfterStartMatch!(args)
     const code = args.rootNode.getLastChild()
     const indent = /^[ \t]*/.exec(args.startMatch[1]!)![0]
-    if (handled && indent && $isCodeNode(code) && $isListNode($previousNonEmpty(code))) $setState(code, fenceIndentState, indent)
+    if (handled && indent && $isCodeNode(code) && $isListNode($previousNonEmpty(code, indent))) $setState(code, fenceIndentState, indent)
     return handled
   },
   export: (node, ...rest) => {
     const out = FENCED_CODE.export!(node, ...rest)
     if (out === null || !$isCodeNode(node)) return out
     const indent = $getState(node, fenceIndentState)
-    if (!indent || !$isListNode($previousNonEmpty(node))) return out
+    if (!indent || !$isListNode($previousNonEmpty(node, indent))) return out
     return out.split('\n').map((line) => (line ? indent + line : line)).join('\n')
   },
 }

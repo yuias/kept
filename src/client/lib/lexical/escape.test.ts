@@ -147,6 +147,43 @@ describe('escapeLineStart', () => {
     expect(escapeLineStart('_ _ _')).toBe('\\_ _ _')
   })
 
+  it('indents a list marker with spaces and tabs only', () => {
+    expect(escapeLineStart('\u3000- x')).toBe('\u3000- x')
+    expect(escapeLineStart('\u30001. x')).toBe('\u30001. x')
+    expect(escapeLineStart('\t- x')).toBe('\t\\- x')
+    expect(escapeLineStart('\t1) x')).toBe('\t1\\) x')
+    // The task pattern allows one `\s` of any kind between the indent and `[`.
+    expect(escapeLineStart('\u3000[ ] x')).toBe('\u3000\\[ ] x')
+    expect(escapeLineStart(' \u3000[ ] x')).toBe(' \u3000\\[ ] x')
+    expect(escapeLineStart('\u3000\u3000[ ] x')).toBe('\u3000\u3000[ ] x')
+  })
+
+  describe('for the first text of a list item', () => {
+    const item = { thematicBreak: true, tableRow: false, listItem: true }
+
+    it.each([
+      ['- x', '\\- x'],
+      ['* x', '\\* x'],
+      ['1. x', '1\\. x'],
+      ['1) x', '1\\) x'],
+      ['> x', '\\> x'],
+      ['>x', '\\>x'],
+      ['# x', '\\# x'],
+      ['```', '\\```'],
+      ['~~~js', '\\~~~js'],
+      ['---', '\\---'],
+      ['--', '\\--'],
+      ['**', '\\**'],
+      ['- -', '\\- -'],
+    ])('escapes %j', (line, escaped) => {
+      expect(escapeLineStart(line, item)).toBe(escaped)
+    })
+
+    it.each(['[ ] x', '[x] x', '@[card](https://e.example)', '| a | b |', 'a - b', '-a', '__'])('leaves %j alone', (line) => {
+      expect(escapeLineStart(line, item)).toBe(line)
+    })
+  })
+
   it('leaves ordinary lines alone', () => {
     for (const line of ['', 'a # b', '#tag', '#1', '-a', '1.5 x', 'a > b', '--', '`code`', '2 * 3', '[ ]', '[x]', '[a] x', '[ x] x', '[link](u) x']) {
       expect(escapeLineStart(line), line).toBe(line)

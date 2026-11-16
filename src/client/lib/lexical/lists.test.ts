@@ -1,4 +1,5 @@
 import { $isListItemNode, $isListNode, $createListItemNode, $createListNode, type ListNode } from '@lexical/list'
+import { marked } from 'marked'
 import { $createTextNode, $getRoot, type LexicalNode } from 'lexical'
 import { describe, expect, it } from 'vitest'
 import { classifyRoundTrip } from './fidelity'
@@ -115,5 +116,53 @@ describe('lists made in the editor', () => {
     expect(result.markdown).toBe(markdown)
     expect(result.reloaded).toEqual(result.built)
     expect(roundTrip(result.markdown)).toBe(result.markdown)
+  })
+})
+
+describe('list items whose text starts like a block', () => {
+  const kinds = ['bullet', 'number', 'check'] as const
+  const texts = ['- x', '* x', '+ x', '1. x', '1) x', '> x', '>x', '# x', '#', '```', '~~~js', '---', '--', '***', '- -', '  - x']
+
+  const buildItems = (kind: (typeof kinds)[number], text: string): ListNode[] => [
+    $createListNode(kind).append($createListItemNode(kind === 'check' ? false : undefined).append($createTextNode(text)), $createListItemNode(kind === 'check' ? false : undefined).append($createTextNode('b'))),
+  ]
+
+  describe.each(kinds)('in a %s list', (kind) => {
+    it.each(texts)('keeps %j as the text of one item', (text) => {
+      const { markdown, built, reloaded } = buildAndReload(() => buildItems(kind, text))
+      expect(reloaded).toEqual(built)
+      expect(roundTrip(markdown)).toBe(markdown)
+      // GFM reads it as one list of two items with the text as typed: no nested list, quote, heading, code or rule.
+      const html = marked.parse(markdown, { async: false })
+      expect(html.match(/<(?:ul|ol|blockquote|hr|h\d|pre)\b/g)).toHaveLength(1)
+    })
+  })
+
+  it('writes the escape once', () => {
+    const write = (kind: (typeof kinds)[number], text: string) => buildAndReload(() => buildItems(kind, text)).markdown
+    expect(write('bullet', '1. x')).toBe('- 1\\. x\n- b')
+    expect(write('check', '1. x')).toBe('- [ ] 1\\. x\n- [ ] b')
+    expect(write('number', '1. x')).toBe('1. 1\\. x\n2. b')
+    expect(write('number', '1) x')).toBe('1. 1\\) x\n2. b')
+    expect(write('bullet', '- x')).toBe('- \\- x\n- b')
+    expect(write('bullet', '---')).toBe('- \\---\n- b')
+    expect(write('check', '> x')).toBe('- [ ] \\> x\n- [ ] b')
+  })
+
+  it('leaves the task spelling of an item as typed', () => {
+    const write = (kind: (typeof kinds)[number], text: string) => buildAndReload(() => buildItems(kind, text)).markdown
+    expect(write('number', '[ ] x')).toBe('1. [ ] x\n2. b')
+    expect(write('check', '[ ] x')).toBe('- [ ] [ ] x\n- [ ] b')
+  })
+
+  it('does not escape text that follows other text in the item', () => {
+    const editor = createMarkdownEditor()
+    editor.update(
+      () => $getRoot().clear().append($createListNode('bullet').append($createListItemNode().append($createTextNode('a'), $createTextNode('- b').toggleFormat('bold')))),
+      { discrete: true },
+    )
+    const markdown = editor.read(() => $exportMarkdown())
+    editor.dispose()
+    expect(markdown).toBe('- a**- b**')
   })
 })
