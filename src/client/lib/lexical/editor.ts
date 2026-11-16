@@ -3,16 +3,23 @@ import { $isAutoLinkNode, $isLinkNode, type LinkNode } from '@lexical/link'
 import { $findMatchingParent, calculateZoomLevel } from '@lexical/utils'
 import { $getNearestNodeFromDOMNode, $getSelection, $isRangeSelection } from 'lexical'
 import { mount, unmount } from 'svelte'
+import FormatBar from '../../components/editor/FormatBar.svelte'
 import PasteChoice from '../../components/editor/PasteChoice.svelte'
 import { linkHref } from '../link-href'
 import { createCardOps } from './cards'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { mountDecorators } from './decorators'
+import { applyLink, formatBarState, type FormatBarState, removeLink, toggleFormat } from './format'
 import { linkClickAction } from './link-click'
 import { isCheckMarkHit, toggleTask } from './tasks'
 
 // A tap fires `pointerup` and then a synthesized `click`; the second is ignored.
 const TAP_DEDUPE_MS = 500
+
+// Space between the selection and the format bar. Below the selection on touch screens the
+// native selection menu sits above it, and the selection handles hang below its end.
+const BAR_GAP = 6
+const BAR_TOUCH_GAP = 28
 
 export interface RichEditorOptions extends EditorCoreOptions {
   root: HTMLElement
@@ -156,6 +163,100 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   root.addEventListener('focusout', closeChoice)
   root.addEventListener('scroll', place)
 
+  // The format bar follows the selection. It is mounted only while shown, so the link field
+  // starts closed each time. The DOM range is kept because the selection leaves the editor
+  // while the link field has the focus.
+  const coarse = window.matchMedia('(pointer: coarse)')
+  const barListeners = new Set<(active: FormatBarState['active']) => void>()
+  let barActive: FormatBarState['active'] = new Set()
+  let bar: { host: HTMLElement; component: Record<string, unknown>; range: Range; resize: ResizeObserver } | null = null
+  const focusEditor = (): void => {
+    root.focus({ preventScroll: true })
+    core.editor.focus()
+  }
+  const placeBar = (): void => {
+    if (!bar) return
+    const rects = bar.range.getClientRects()
+    const first = rects[0] ?? bar.range.getBoundingClientRect()
+    const last = rects[rects.length - 1] ?? first
+    const area = root.getBoundingClientRect()
+    const frame = wrapper.getBoundingClientRect()
+    bar.host.hidden = last.bottom < area.top || first.top > area.bottom
+    if (bar.host.hidden) return
+    const { offsetWidth: width, offsetHeight: height } = bar.host
+    const above = { top: first.top - height - BAR_GAP, left: first.left }
+    const below = { top: last.bottom + (coarse.matches ? BAR_TOUCH_GAP : BAR_GAP), left: last.left }
+    const fits = (spot: { top: number }): boolean => spot.top >= area.top && spot.top + height <= area.bottom
+    const spots = coarse.matches ? [below, above] : [above, below]
+    const spot = spots.find(fits) ?? spots[0]!
+    bar.host.style.top = `${spot.top - frame.top}px`
+    bar.host.style.left = `${Math.max(0, Math.min(spot.left - frame.left, frame.width - width))}px`
+  }
+  const closeBar = (): void => {
+    if (!bar) return
+    // Cleared first: removing the focused link field fires `focusout`, which closes again.
+    const closing = bar
+    bar = null
+    closing.resize.disconnect()
+    void unmount(closing.component)
+    closing.host.remove()
+  }
+  const refreshBar = (): void => {
+    const inBar = bar?.host.contains(document.activeElement) ?? false
+    const state = formatBarState(core.editor)
+    if (core.gate.active || !state.visible || !(inBar || root.contains(document.activeElement))) return closeBar()
+    let range = bar?.range
+    if (!inBar) {
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0 || !root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) return closeBar()
+      range = selection.getRangeAt(0).cloneRange()
+    }
+    barActive = state.active
+    if (bar) {
+      bar.range = range!
+      for (const listener of [...barListeners]) listener(barActive)
+    } else {
+      const host = document.createElement('div')
+      host.style.position = 'absolute'
+      host.style.zIndex = '5'
+      host.addEventListener('focusout', onBarFocusOut)
+      wrapper.append(host)
+      const component = mount(FormatBar, {
+        target: host,
+        props: {
+          subscribe: (listener) => {
+            barListeners.add(listener)
+            listener(barActive)
+            return () => barListeners.delete(listener)
+          },
+          onformat: (format) => toggleFormat(core.editor, core.gate, format),
+          onlink: (url) => applyLink(core.editor, core.gate, url),
+          onunlink: () => removeLink(core.editor, core.gate),
+          onfocuseditor: focusEditor,
+        },
+      })
+      // The link field is wider than the buttons.
+      const resize = new ResizeObserver(placeBar)
+      resize.observe(host)
+      bar = { host, component, range: range!, resize }
+    }
+    placeBar()
+  }
+  // Focus moving between the editor and the bar keeps it; anywhere else closes it.
+  const onBarFocusOut = (event: FocusEvent): void => {
+    const next = event.relatedTarget
+    if (next instanceof Node && (root.contains(next) || bar?.host.contains(next))) return
+    closeBar()
+  }
+  const stopBarUpdates = core.editor.registerUpdateListener(refreshBar)
+  const stopBarEditable = core.editor.registerEditableListener(refreshBar)
+  root.addEventListener('focusin', refreshBar)
+  root.addEventListener('focusout', onBarFocusOut)
+  root.addEventListener('compositionstart', refreshBar)
+  root.addEventListener('compositionend', refreshBar)
+  root.addEventListener('scroll', placeBar)
+  window.addEventListener('resize', placeBar)
+
   return {
     insertText: (s) => core.insertText(s),
     replaceText: (token, s) => core.replaceText(token, s),
@@ -175,6 +276,15 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
       closePopup()
       root.removeEventListener('focusout', closeChoice)
       root.removeEventListener('scroll', place)
+      stopBarUpdates()
+      stopBarEditable()
+      closeBar()
+      root.removeEventListener('focusin', refreshBar)
+      root.removeEventListener('focusout', onBarFocusOut)
+      root.removeEventListener('compositionstart', refreshBar)
+      root.removeEventListener('compositionend', refreshBar)
+      root.removeEventListener('scroll', placeBar)
+      window.removeEventListener('resize', placeBar)
       stopEditable()
       stopDecorators()
       root.removeEventListener('compositionstart', begin)

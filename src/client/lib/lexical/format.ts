@@ -1,5 +1,5 @@
 import { $isCodeNode } from '@lexical/code-core'
-import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
+import { $isAutoLinkNode, $isLinkNode, $toggleLink } from '@lexical/link'
 import { $findMatchingParent, mergeRegister } from '@lexical/utils'
 import {
   $getSelection,
@@ -7,6 +7,7 @@ import {
   $isTextNode,
   COMMAND_PRIORITY_HIGH,
   FORMAT_TEXT_COMMAND,
+  HISTORY_PUSH_TAG,
   IS_APPLE,
   isModifierMatch,
   KEY_DOWN_COMMAND,
@@ -15,6 +16,8 @@ import {
   type TextFormatType,
   type TextNode,
 } from 'lexical'
+import { linkHref } from '../link-href'
+import type { CompositionGate } from './composition'
 
 /** The formats markdown can store; every other text format is refused. */
 const FORMATS = ['bold', 'italic', 'strikethrough', 'code'] as const
@@ -97,4 +100,48 @@ export function formatBarState(editor: LexicalEditor): FormatBarState {
     }
     return { visible: true, active }
   })
+}
+
+/** Toggles `format` on the selection through the composition gate, as Mod-b does. */
+export function toggleFormat(editor: LexicalEditor, gate: CompositionGate, format: InlineFormat): void {
+  gate.run(() => void editor.dispatchCommand(FORMAT_TEXT_COMMAND, format))
+}
+
+/**
+ * Wraps the selection in a link to `raw`, or points the link it is in at it.
+ * False, with the document untouched, when `linkHref` refuses `raw` or the
+ * selection is no range outside code (the answer is decided now; the update may
+ * wait out a composition). The stored target is the href the app would open, so
+ * `www.example.com` is written as `http://www.example.com`.
+ */
+export function applyLink(editor: LexicalEditor, gate: CompositionGate, raw: string): boolean {
+  const href = linkHref(raw)
+  if (href === null || !editor.read($canLink)) return false
+  // Its own undo step: typing right before it would otherwise merge with it.
+  gate.run(() =>
+    editor.update(
+      () => {
+        if ($canLink()) $toggleLink(href)
+      },
+      { discrete: true, tag: [HISTORY_PUSH_TAG] },
+    ),
+  )
+  return true
+}
+
+/** Takes the links off the selection, keeping their text. */
+export function removeLink(editor: LexicalEditor, gate: CompositionGate): void {
+  gate.run(() =>
+    editor.update(
+      () => {
+        if ($canLink()) $toggleLink(null)
+      },
+      { discrete: true, tag: [HISTORY_PUSH_TAG] },
+    ),
+  )
+}
+
+function $canLink(): boolean {
+  const selection = $getSelection()
+  return $isRangeSelection(selection) && !selection.isCollapsed() && !$inCodeBlock(selection)
 }
