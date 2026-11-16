@@ -42,6 +42,7 @@ import { createPlaceholderOps } from './placeholders'
 import { $replaceDocument, applyExternalValue, EXTERNAL_TAG } from './sync'
 import { registerTaskShortcut } from './task-shortcut'
 import { theme } from './theme'
+import { createUrlPaste, type UrlPasteController } from './url-paste'
 
 export { EXTERNAL_TAG }
 
@@ -64,6 +65,7 @@ export interface EditorCoreOptions {
 export interface EditorCore extends BodyEditor {
   editor: LexicalEditor
   gate: CompositionGate
+  urlPaste: UrlPasteController
   setValue(markdown: string): void
   setReadOnly(readOnly: boolean, tasksToggleable: boolean): void
   destroy(): void
@@ -215,6 +217,8 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
     options.onEmptyChange(empty)
   }
   syncEmpty()
+  const gate = new CompositionGate(editor)
+  const urlPaste = createUrlPaste(editor, gate)
   const unregister = [
     registerMarkdownChanges(editor, transformers, state, options.onChange),
     // Before Lexical's own paste handling: the app takes image files itself and
@@ -225,7 +229,8 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
         // Lexical also dispatches this for an `insertFromPaste` input event, which has no
         // `clipboardData`; the callback only reads it, so it sees no files then.
         options.onPaste(event as ClipboardEvent)
-        return event.defaultPrevented
+        // A pasted image wins: its clipboard may carry the file name as text too.
+        return event.defaultPrevented || urlPaste.paste(event as ClipboardEvent)
       },
       COMMAND_PRIORITY_HIGH,
     ),
@@ -235,12 +240,12 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
     }),
   ]
 
-  const gate = new CompositionGate(editor)
   const placeholders = createPlaceholderOps(editor, gate, transformers)
 
   return {
     editor,
     gate,
+    urlPaste,
     setValue(markdown) {
       applyExternalValue(editor, gate, markdown, {
         transformers,
@@ -267,6 +272,7 @@ export function createEditorCore(options: EditorCoreOptions, transformers: Trans
         placeholders.flush()
       } finally {
         for (const off of unregister) off()
+        urlPaste.destroy()
         gate.dispose()
         editor.dispose()
       }
