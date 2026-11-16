@@ -46,8 +46,11 @@ const CHARACTER_REFERENCE = /^&(?:#\d{1,7}|#[xX][\da-fA-F]{1,6});/
  * is once the importer reads images; before that it stays plain text and must
  * keep its bytes. A `[` with an empty label that is not part of `![` is never
  * markup for the importer, so it is left alone.
+ *
+ * `range` limits the output to that slice of `text`: the rest only supplies
+ * context, so that a pair opened in one node and closed in the next is found.
  */
-export function escapePlainText(text: string, before: Edge, after: Edge, imageSyntax = false): string {
+export function escapePlainText(text: string, before: Edge, after: Edge, imageSyntax = false, range: [number, number] = [0, text.length]): string {
   // One pass over the original text: every rule adds indexes, so a backslash
   // added by one rule is never escaped again by another.
   const escaped = new Set<number>()
@@ -116,7 +119,7 @@ export function escapePlainText(text: string, before: Edge, after: Edge, imageSy
   }
 
   let out = ''
-  for (let i = 0; i < text.length; i++) out += (escaped.has(i) ? '\\' : '') + text[i]
+  for (let i = range[0]; i < range[1]; i++) out += (escaped.has(i) ? '\\' : '') + text[i]
   return out
 }
 

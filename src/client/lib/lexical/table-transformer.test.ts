@@ -13,6 +13,7 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
+  $getState,
   IS_BOLD,
   IS_CODE,
   IS_ITALIC,
@@ -23,7 +24,7 @@ import { describe, expect, it } from 'vitest'
 import { classifyRoundTrip } from './fidelity'
 import { $exportMarkdown, $importMarkdown, createMarkdownEditor, roundTrip } from './markdown'
 import { $createImageNode } from './nodes/image-node'
-import { isTableStart } from './table-transformer'
+import { isTableStart, tableHeaderlessState } from './table-transformer'
 
 interface CellShape {
   header: boolean
@@ -349,5 +350,233 @@ describe('lists around a table', () => {
 
   it('imports a nested list after a table as it does without one', () => {
     expect(roundTrip('| h |\n| - |\n\n- a\n  - b\n    - c')).toBe(`| h |\n| --- |\n\n${roundTrip('- a\n  - b\n    - c')}`)
+  })
+})
+
+/** Imports `markdown` and describes the children of the first paragraph of every cell of the first table. */
+function cellContents(markdown: string): string[][][] {
+  const editor = createMarkdownEditor()
+  editor.update(() => $importMarkdown(markdown), { discrete: true })
+  const result = editor.read(() => {
+    const [first] = $getRoot().getChildren()
+    if (!$isTableNode(first)) throw new Error('not a table')
+    return first.getChildren().map((row) =>
+      (row as unknown as { getChildren: () => LexicalNode[] }).getChildren().map((cell) =>
+        (cell as unknown as { getFirstChild: () => { getChildren: () => LexicalNode[] } }).getFirstChild().getChildren().map((child) =>
+          child.getType() === 'text' ? `${child.getTextContent()}${(child as ReturnType<typeof $createTextNode>).getFormat() ? '*' : ''}` : `<${child.getType()}>`,
+        ),
+      ),
+    )
+  })
+  editor.dispose()
+  return result
+}
+
+describe('headerless tables', () => {
+  const source = '|  |  |\n| --- | --- |\n| a | b |\n| c | d |'
+
+  it('reads an empty header row followed by body rows as body rows only', () => {
+    const [rows] = shape(source) as CellShape[][][]
+    expect(rows!.map((row) => row.map((c) => c.header))).toEqual([
+      [false, false],
+      [false, false],
+    ])
+    expect(texts(rows)).toEqual([['a', 'b'], ['c', 'd']])
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it('marks the table and keeps the alignments on the body cells', () => {
+    const editor = createMarkdownEditor()
+    editor.update(() => $importMarkdown('|||\n| :-- | --: |\n| a | b |'), { discrete: true })
+    editor.read(() => {
+      const [node] = $getRoot().getChildren()
+      expect($getState(node as never, tableHeaderlessState)).toBe(true)
+    })
+    expect(shape('|||\n| :-- | --: |\n| a | b |')).toEqual([[[{ header: false, align: 'left', text: 'a' }, { header: false, align: 'right', text: 'b' }]]])
+    expect(roundTrip('| |  |\n| :-- | --: |\n| a | b |')).toBe('|  |  |\n| :--- | ---: |\n| a | b |')
+    editor.dispose()
+  })
+
+  it('keeps the empty header row of a table without body rows', () => {
+    const [rows] = shape('|  |  |\n| --- | --- |') as CellShape[][][]
+    expect(rows!.map((row) => row.map((c) => c.header))).toEqual([[true, true]])
+    expect(roundTrip('|  |  |\n| --- | --- |')).toBe('|  |  |\n| --- | --- |')
+  })
+
+  it('keeps a header row with one non-empty cell, including a cell that is only `<br>`', () => {
+    for (const header of ['| a |  |', '| <br> |  |']) {
+      const [rows] = shape(`${header}\n| --- | --- |\n| 1 | 2 |`) as CellShape[][][]
+      expect(rows![0]!.map((c) => c.header)).toEqual([true, true])
+    }
+  })
+
+  it('writes an empty header row for a first row that is not a header row', () => {
+    const { markdown, again } = exportAndReload(() => [table([cell(false, paragraph(text('a'))), cell(false, paragraph(text('b')))])])
+    expect(markdown).toBe('|  |  |\n| --- | --- |\n| a | b |')
+    expect(again).toBe(markdown)
+  })
+
+  it('exports the header row of an editor-built table whose header text was deleted, and reads it back headerless', () => {
+    const { markdown, shape: reloaded, again } = exportAndReload(() => [
+      table([cell(true, paragraph()), cell(true, paragraph())], [cell(false, paragraph(text('a'))), cell(false, paragraph(text('b')))]),
+    ])
+    expect(markdown).toBe('|  |  |\n| --- | --- |\n| a | b |')
+    expect(again).toBe(markdown)
+    expect((reloaded[0] as CellShape[][]).map((row) => row.map((c) => c.header))).toEqual([[false, false]])
+  })
+
+  it('keeps a table with an emptied header row and no body rows as it is', () => {
+    const { markdown, again } = exportAndReload(() => [table([cell(true, paragraph()), cell(true, paragraph())])])
+    expect(markdown).toBe('|  |  |\n| --- | --- |')
+    expect(again).toBe(markdown)
+  })
+})
+
+describe('`<br>` in a cell', () => {
+  it.each(['<br>', '<br/>', '<br />', '<BR>', '<Br />'])('reads %s as a line break', (br) => {
+    expect(cellContents(`| h |\n| - |\n| a${br}b |`)[1]![0]).toEqual(['a', '<linebreak>', 'b'])
+  })
+
+  // A line break has no spelling to remember; the fidelity guard compares the spellings as equal.
+  it('normalizes the spelling to `<br>`', () => {
+    expect(roundTrip('| a<br/>b | c<BR />d |\n| --- | --- |')).toBe('| a<br>b | c<br>d |\n| --- | --- |')
+    expect(classifyRoundTrip('| a<br/>b | c<BR />d |\n| --- | --- |', '| a<br>b | c<br>d |\n| --- | --- |')).toBe('render-equal')
+  })
+
+  it('reads a cell that is only `<br>`, a leading one and a trailing one', () => {
+    expect(cellContents('| <br> | <br>a | a<br> |\n| - | - | - |')[0]).toEqual([['<linebreak>'], ['<linebreak>', 'a'], ['a', '<linebreak>']])
+    const source = '| <br> | <br>a | a<br> |\n| --- | --- | --- |'
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it('keeps the format on both sides of a break', () => {
+    expect(cellContents('| **a<br>b** | `x` |\n| - | - |')[0]![0]).toEqual(['a*', '<linebreak>', 'b*'])
+  })
+
+  it('does not read `<br>` inside a code span or after a backslash as a break', () => {
+    expect(cellContents('| `a<br>b` | a\\<br>b | a\\\\<br>b |\n| - | - | - |')[0]).toEqual([['a<br>b*'], ['a<br>b'], ['a\\', '<linebreak>', 'b']])
+  })
+
+  it('does not leak the marker character into a cell that contains it', () => {
+    expect(cellContents('| \u2020\\<br>\u2021<br>\u2022 |\n| - |')[0]).toEqual([['\u2020<br>\u2021', '<linebreak>', '\u2022']])
+  })
+
+  it.each([
+    ['**a:**<br>b', ['a:*', '<linebreak>', 'b']],
+    ['a<br>_b_', ['a', '<linebreak>', 'b*']],
+    ['a<br>**(b)**', ['a', '<linebreak>', '(b)*']],
+    ['**太字。**<br>次', ['太字。*', '<linebreak>', '次']],
+    ['__a__<br>b', ['a*', '<linebreak>', 'b']],
+  ])('keeps emphasis next to a break: %s', (cellSource, expected) => {
+    expect(cellContents(`| ${cellSource} |\n| - |`)[0]![0]).toEqual(expected)
+  })
+
+  it.each([
+    '[t](https://e.example/a\\<br>b)',
+    '![a\\<br>b](/img/abc)',
+    '![a](/img/abc "x\\<br>y")',
+    '[t](https://e.example "a\\<br>b")',
+    '[a\\<br>b](https://e.example)',
+  ])('does not leave the marker character in the fields of an escaped `<br>`: %s', (cellSource) => {
+    const source = `| ${cellSource} |\n| --- |`
+    const exported = roundTrip(source)
+    expect(exported).not.toMatch(/\u2020/)
+    expect(classifyRoundTrip(source, exported)).not.toBe('render-different')
+  })
+
+  it.each([
+    'https://e.example/a_b<br>x',
+    'see https://e.example/~u/x_y<br>x',
+    'snake_case<br>x',
+    'a_b_c<br>d',
+    'a * b<br>c',
+    '[x] y<br>z',
+  ])('keeps the bytes of a cell with plain text next to a break: %s', (cellSource) => {
+    const source = `| ${cellSource} |\n| --- |`
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it.each(['![a<br>b](/img/abc)', '[t](https://e.example/a<br>b)', '[t](https://e.example "a<br>b")'])('keeps `<br>` in the attributes of %s', (cellSource) => {
+    const source = `| ${cellSource} |\n| --- |`
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it('reads a break inside a link label', () => {
+    const source = '| [a<br>b](https://e.example/x) |\n| --- |'
+    expect(roundTrip(source)).toBe(source)
+  })
+
+  it('reads breaks in body rows without changing the neighbouring cells', () => {
+    expect(cellContents('| h | i |\n| - | - |\n| a<br>b | c |')[1]).toEqual([['a', '<linebreak>', 'b'], ['c']])
+  })
+})
+
+describe('`<br>` written from the editor', () => {
+  it('writes a line break and a second paragraph, which read back as a line break', () => {
+    const { markdown, again } = exportAndReload(() => [
+      table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('a'), $createLineBreakNode(), text('b')))], [cell(false, paragraph(text('a')), paragraph(text('b')))]),
+    ])
+    expect(markdown).toBe('| h |\n| --- |\n| a<br>b |\n| a<br>b |')
+    expect(again).toBe(markdown)
+  })
+
+  it('writes a cell that is only a line break', () => {
+    const { markdown, again } = exportAndReload(() => [table([cell(true, paragraph(text('h')))], [cell(false, paragraph($createLineBreakNode()))])])
+    expect(markdown).toBe('| h |\n| --- |\n| <br> |')
+    expect(again).toBe(markdown)
+  })
+
+  it('keeps typed `<br>` text as text by escaping it in a cell', () => {
+    const { markdown, shape: reloaded, again } = exportAndReload(() => [
+      table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('a<br>b')))], [cell(false, paragraph(text('x<BR />y', IS_BOLD)))]),
+    ])
+    expect(markdown).toBe('| h |\n| --- |\n| a\\<br>b |\n| **x\\<BR />y** |')
+    expect(again).toBe(markdown)
+    expect(texts(reloaded[0])).toEqual([['h'], ['a<br>b'], ['x<BR />y']])
+  })
+
+  it('keeps a backslash before typed `<br>` text', () => {
+    const { markdown, shape: reloaded, again } = exportAndReload(() => [table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('a\\<br>b')))])])
+    expect(again).toBe(markdown)
+    expect(texts(reloaded[0])).toEqual([['h'], ['a\\<br>b']])
+  })
+
+  it.each([
+    ['*a', 'b*'],
+    ['`a', 'b`'],
+    ['[a', 'b](https://e.example)'],
+    ['**a', 'b**'],
+    ['_a', 'b_'],
+    ['~~a', 'b~~'],
+  ])('keeps typed %j and %j around a line break as text', (first, second) => {
+    const { markdown, shape: reloaded, again } = exportAndReload(() => [
+      table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text(first), $createLineBreakNode(), text(second)))]),
+    ])
+    expect(again).toBe(markdown)
+    expect(cellContents(markdown)[1]![0]).toEqual([first, '<linebreak>', second])
+    expect(texts(reloaded[0])[1]).toEqual([`${first}\n${second}`])
+  })
+
+  it('writes a typed URL next to a break unescaped', () => {
+    const { markdown } = exportAndReload(() => [
+      table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('https://e.example/a_b'), $createLineBreakNode(), text('x')))]),
+    ])
+    expect(markdown).toBe('| h |\n| --- |\n| https://e.example/a_b<br>x |')
+  })
+
+  it('keeps typed markup characters in two paragraphs of a cell as text', () => {
+    const { markdown, again } = exportAndReload(() => [table([cell(true, paragraph(text('h')))], [cell(false, paragraph(text('*a')), paragraph(text('b*')))])])
+    expect(again).toBe(markdown)
+    expect(cellContents(markdown)[1]![0]).toEqual(['*a', '<linebreak>', 'b*'])
+  })
+
+  it('leaves `<br>` text outside a table as it is', () => {
+    expect(roundTrip('a<br>b')).toBe('a<br>b')
+  })
+
+  it('writes `<br>` text in a code span as it is', () => {
+    const { markdown, again } = exportAndReload(() => [table([cell(true, paragraph(text('<br>', IS_CODE)))])])
+    expect(markdown).toBe('| `<br>` |\n| --- |')
+    expect(again).toBe(markdown)
   })
 })

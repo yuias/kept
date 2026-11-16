@@ -13,7 +13,9 @@ import {
 } from '@lexical/markdown'
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
 import { $isListItemNode, $isListNode, type ListNode } from '@lexical/list'
+import { $isTableCellNode } from '@lexical/table'
 import {
+  $isElementNode,
   $isLineBreakNode,
   $isTextNode,
   defineExtension,
@@ -23,6 +25,7 @@ import {
   IS_STRIKETHROUGH,
   type LexicalEditorWithDispose,
   type LexicalNode,
+  type TextNode,
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
@@ -62,6 +65,31 @@ function edge(sibling: LexicalNode | null, last: boolean): Edge {
   return (last ? /.$/su : /^./su).exec(sibling.getTextContent())?.[0] ?? ''
 }
 
+// In a cell, `<br>` does not end inline markup: `*a`, a break and `b*` read as one
+// emphasis. For a plain text node that touches a break (or sits in a cell with
+// several paragraphs), this is the joined text of the plain run around it, the
+// node's offset in it, and what the exporter writes beyond the run.
+function breakRun(node: TextNode): { text: string; start: number; before: Edge; after: Edge } | null {
+  const cell = node.getParents().find($isTableCellNode)
+  if (!cell) return null
+  // `null` stands for the `<br>` the table writes between two paragraphs.
+  const items = cell.getChildren().flatMap((block, index) => [...(index ? [null] : []), ...($isElementNode(block) ? block.getChildren() : [block])])
+  const at = items.indexOf(node)
+  const plain = (item: LexicalNode | null) => item === null || $isLineBreakNode(item) || ($isTextNode(item) && item.getFormat() === 0)
+  let first = at
+  let last = at
+  while (first > 0 && plain(items[first - 1]!)) first--
+  while (last < items.length - 1 && plain(items[last + 1]!)) last++
+  if (at < 0 || first === last) return null
+  const part = (item: LexicalNode | null) => (item === null || $isLineBreakNode(item) ? '<br>' : item.getTextContent())
+  return {
+    text: items.slice(first, last + 1).map(part).join(''),
+    start: items.slice(first, at).map(part).join('').length,
+    before: first > 0 ? edge(items[first - 1]!, true) : '',
+    after: last < items.length - 1 ? edge(items[last + 1]!, false) : '',
+  }
+}
+
 const isBulletItem = (node: LexicalNode | null): boolean =>
   $isListItemNode(node) && $isListNode(node.getParent()) && (node.getParent() as ListNode).getListType() === 'bullet'
 
@@ -71,9 +99,12 @@ const isBulletItem = (node: LexicalNode | null): boolean =>
 // delimiter edges.
 setPlainTextEscaper((text, node) => {
   const own = delimiterOf(node.getFormat())
+  const run = own ? null : breakRun(node)
   let escaped = own
     ? escapePlainText(text, { delimiter: own }, { delimiter: own }, true)
-    : escapePlainText(text, edge(node.getPreviousSibling(), true), edge(node.getNextSibling(), false), true)
+    : run
+      ? escapePlainText(run.text, run.before, run.after, true, [run.start, run.start + text.length])
+      : escapePlainText(text, edge(node.getPreviousSibling(), true), edge(node.getNextSibling(), false), true)
   // CHECK_LIST reads `- [ ] x` and `[ ] x` alike, so a bullet item whose text starts
   // with `[ ]` would reload as a task. The `[` is the only character to escape.
   if (!own && !node.getPreviousSibling() && isBulletItem(node.getParent())) {
@@ -84,6 +115,8 @@ setPlainTextEscaper((text, node) => {
       escaped = `${escaped.slice(0, at)}\\${escaped.slice(at)}`
     }
   }
+  // The table reads `<br>` in a cell as a line break, so typed `<br>` text needs its `<` escaped.
+  if (/<br/i.test(escaped) && node.getParents().some($isTableCellNode)) escaped = escaped.replace(/<(?=br\s*\/?>)/gi, '\\<')
   // A `!` right before a link would join it into `![label](url)`. Only an
   // escape the importer would otherwise read as an image is worth the byte
   // change: links that IMAGE does not match (`<url>`, parentheses) keep `!`.

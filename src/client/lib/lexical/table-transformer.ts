@@ -1,3 +1,4 @@
+import { $isLinkNode } from '@lexical/link'
 import type { MultilineElementTransformer, Transformer } from '@lexical/markdown'
 import { $generateNodesFromMarkdownString } from '@lexical/markdown'
 import {
@@ -12,7 +13,18 @@ import {
   TableNode,
   TableRowNode,
 } from '@lexical/table'
-import { $createParagraphNode, $isElementNode, type ElementFormatType, type ElementNode } from 'lexical'
+import { $dfs } from '@lexical/utils'
+import {
+  $createLineBreakNode,
+  $createParagraphNode,
+  $createTextNode,
+  $isElementNode,
+  $setState,
+  createState,
+  type ElementFormatType,
+  type ElementNode,
+} from 'lexical'
+import { $isImageNode } from './nodes/image-node'
 
 const TRIM = /^[ \t\r]+|[ \t\r]+$/g
 const DELIMITER_CELL = /^:?-+:?$/
@@ -60,6 +72,13 @@ export function isTableStart(header: string, delimiter: string | undefined): boo
   return cells !== null && splitRow(header).length === cells.length
 }
 
+/**
+ * The header row of an imported table was empty and body rows follow, so every
+ * row is a body row and the export writes the empty header row back. The
+ * CodeMirror table model draws such a table the same way (`headerless`).
+ */
+export const tableHeaderlessState = createState('keptTableHeaderless', { parse: (value) => value === true })
+
 const ALIGNMENTS: Record<string, ElementFormatType> = { ':-': 'left', '-:': 'right', ':-:': 'center' }
 const alignmentOf = (cell: string): ElementFormatType =>
   ALIGNMENTS[`${cell.startsWith(':') ? ':' : ''}-${cell.endsWith(':') ? ':' : ''}`] ?? ''
@@ -69,12 +88,59 @@ const DELIMITERS: Partial<Record<ElementFormatType, string>> = { left: ':---', r
 const unescapePipes = (cell: string): string => cell.replace(/\\([\s\S])/g, (match, char: string) => (char === '|' ? '|' : match))
 const escapePipes = (markdown: string): string => markdown.replace(/\\[\s\S]|\|/g, (match) => (match === '|' ? '\\|' : match))
 
+// What the cell scan looks at: an escaped `<` that starts `<br>`, any other backslash
+// pair, or a code span. Only the first is changed.
+const CELL_UNITS = /\\<(?=br\s*\/?>)|\\[\s\S]|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g
+const BREAK = /<br\s*\/?>/i
+
+/**
+ * Reads the text of a cell into a paragraph. The importer keeps `<br>` as text,
+ * which is split into `LineBreakNode`s afterwards, except where a backslash
+ * escaped it: the importer unescapes `\<br>` into the same text, so the `<` of
+ * an escaped one goes through the importer as a punctuation character (one that
+ * the cell does not contain) and is turned back into `<` after the split. A
+ * code span keeps `<br>` as text, as in the CodeMirror table model.
+ */
+function $readCell(text: string, inline: Transformer[]): ElementNode {
+  // A punctuation character, so that emphasis next to it is read as it is next to `<`.
+  let code = 0x2020
+  while (text.includes(String.fromCodePoint(code))) code++
+  const mark = String.fromCodePoint(code)
+  const marked = text.replace(CELL_UNITS, (unit) => (unit === '\\<' ? mark : unit))
+  const paragraph = $generateNodesFromMarkdownString(marked, inline, true, false)[0] as ElementNode
+  const unmark = <T extends string | null>(value: T): T => (value === null ? value : (value.split(mark).join('<') as T))
+  // Destinations, titles and alt text are not text nodes; the importer unescaped them as well.
+  for (const { node } of $dfs(paragraph)) {
+    if ($isLinkNode(node)) node.setURL(unmark(node.getURL())).setTitle(unmark(node.getTitle()))
+    else if ($isImageNode(node)) node.setSrc(unmark(node.getSrc())).setAlt(unmark(node.getAlt())).setTitle(unmark(node.getTitle()))
+  }
+  for (const node of paragraph.getAllTextNodes()) {
+    const content = node.getTextContent()
+    const parts = (node.hasFormat('code') ? [content] : content.split(BREAK)).map((part) => part.split(mark).join('<'))
+    if (parts.length === 1) {
+      node.setTextContent(parts[0]!)
+      continue
+    }
+    node.getParentOrThrow().splice(
+      node.getIndexWithinParent(),
+      1,
+      parts.flatMap((part, index) => [
+        ...(index > 0 ? [$createLineBreakNode()] : []),
+        ...(part === '' ? [] : [$createTextNode(part).setFormat(node.getFormat()).setStyle(node.getStyle())]),
+      ]),
+    )
+  }
+  return paragraph
+}
+
 /** The table as markdown lines: header row, delimiter row, body rows. */
 export function exportTable(node: TableNode, exportChildren: (node: ElementNode) => string): string {
   const rows = node.getChildren().filter($isTableRowNode).map((row) => row.getChildren().filter($isTableCellNode))
   const columns = Math.max(0, ...rows.map((row) => row.length))
   if (columns === 0) return ''
   const line = (cells: string[]) => `| ${cells.join(' | ')} |`
+  // A first row without header cells is a body row; reading it as the header would restyle it on reload.
+  const headerless = !rows[0]!.some((cell) => cell.hasHeaderState(TableCellHeaderStates.ROW))
   const lines = rows.map((row) =>
     line(
       Array.from({ length: columns }, (_, column) => {
@@ -86,6 +152,7 @@ export function exportTable(node: TableNode, exportChildren: (node: ElementNode)
     ),
   )
   const delimiter = Array.from({ length: columns }, (_, column) => DELIMITERS[rows[0]![column]?.getFormatType() ?? ''] ?? '---')
+  if (headerless) lines.unshift(line(Array.from({ length: columns }, () => '')))
   lines.splice(1, 0, line(delimiter))
   return lines.join('\n')
 }
@@ -96,12 +163,15 @@ export function exportTable(node: TableNode, exportChildren: (node: ElementNode)
  *
  * Import: a header row, a delimiter row, then rows until the first line that
  * does not start with `|`. A short row is padded to the delimiter's column
- * count and extra cells are dropped. Row 0 is the header row; alignment is
- * kept on the cells.
+ * count and extra cells are dropped. Row 0 is the header row, unless every
+ * header cell is empty and body rows follow (then all rows are body rows and
+ * the table is marked headerless); alignment is kept on the cells. `<br>` in a
+ * cell is a line break.
  *
  * Export: `| a | b |`, delimiter `---` / `:---` / `---:` / `:---:` from the
- * alignment of row 0, `|` in a cell written as `\|`, a line break or a second
- * paragraph in a cell as `<br>`.
+ * alignment of row 0, an empty header row first when row 0 is not a header row,
+ * `|` in a cell written as `\|`, a line break or a second paragraph in a cell
+ * as `<br>`.
  */
 export function createTableTransformer(inlineTransformers: () => Transformer[]): MultilineElementTransformer {
   return {
@@ -118,16 +188,20 @@ export function createTableTransformer(inlineTransformers: () => Transformer[]):
         return $createTableRowNode().append(
           ...alignments.map((alignment, column) => {
             const text = unescapePipes(cells[column] ?? '')
-            const paragraph = text === '' ? $createParagraphNode() : $generateNodesFromMarkdownString(text, inline, true, false)[0]!
             const cell = $createTableCellNode(isHeader ? TableCellHeaderStates.ROW : TableCellHeaderStates.NO_STATUS)
-            return cell.setFormat(alignment).append(paragraph)
+            return cell.setFormat(alignment).append(text === '' ? $createParagraphNode() : $readCell(text, inline))
           }),
         )
       }
 
-      const table = $createTableNode().append($row(header, true))
       let last = startLineIndex + 1
-      while (last + 1 < lines.length && lines[last + 1]!.startsWith('|')) table.append($row(lines[++last]!, false))
+      while (last + 1 < lines.length && lines[last + 1]!.startsWith('|')) last++
+      // An empty header row is what `addEmptyHeaders` writes for a table without one; with
+      // no body row it stays, so that the table has a row to click into.
+      const headerless = last > startLineIndex + 1 && splitRow(header).every((cell) => cell === '')
+      const table = $createTableNode().append(...(headerless ? [] : [$row(header, true)]))
+      for (let index = startLineIndex + 2; index <= last; index++) table.append($row(lines[index]!, false))
+      if (headerless) $setState(table, tableHeaderlessState, true)
       rootNode.append(table)
       return [true, last]
     },
