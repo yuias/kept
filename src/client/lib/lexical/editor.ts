@@ -1,11 +1,14 @@
 import { $isListItemNode, $isListNode } from '@lexical/list'
-import { calculateZoomLevel } from '@lexical/utils'
-import { $getNearestNodeFromDOMNode } from 'lexical'
+import { $isAutoLinkNode, $isLinkNode, type LinkNode } from '@lexical/link'
+import { $findMatchingParent, calculateZoomLevel } from '@lexical/utils'
+import { $getNearestNodeFromDOMNode, $getSelection, $isRangeSelection } from 'lexical'
 import { mount, unmount } from 'svelte'
 import PasteChoice from '../../components/editor/PasteChoice.svelte'
+import { linkHref } from '../link-href'
 import { createCardOps } from './cards'
 import { createEditorCore, type EditorCore, type EditorCoreOptions } from './core'
 import { mountDecorators } from './decorators'
+import { linkClickAction } from './link-click'
 import { isCheckMarkHit, toggleTask } from './tasks'
 
 // A tap fires `pointerup` and then a synthesized `click`; the second is ignored.
@@ -76,6 +79,45 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
   root.addEventListener('click', onTaskClick)
   root.addEventListener('pointerup', onTaskPointerUp)
 
+  // Own handlers instead of ClickableLinkExtension, which ignores read-only and opens targets
+  // `linkHref` rejects. An unlinked auto link renders as plain text, so it is not a link here.
+  // The caret is read on the capture `pointerdown`, before the browser moves it onto the link.
+  let caretInLink = false
+  const $linkUnder = (target: EventTarget | null): LinkNode | null => {
+    const node = target instanceof Node ? $getNearestNodeFromDOMNode(target) : null
+    return node && $findMatchingParent(node, (n): n is LinkNode => $isLinkNode(n) && !($isAutoLinkNode(n) && n.getIsUnlinked()))
+  }
+  const onLinkPointerDown = (event: PointerEvent): void => {
+    // A caret left in the link while the editor was blurred is not one the user just placed.
+    caretInLink = root.contains(document.activeElement) && core.editor.read(() => {
+      const link = $linkUnder(event.target)
+      const selection = $getSelection()
+      if (!link || !$isRangeSelection(selection) || !selection.isCollapsed()) return false
+      return $findMatchingParent(selection.anchor.getNode(), (n) => n.is(link)) !== null
+    })
+  }
+  const onLinkClick = (event: MouseEvent): void => {
+    // `click` is the primary button only; `auxclick` also fires for the context menu button.
+    if (event.button !== (event.type === 'auxclick' ? 1 : 0)) return
+    const url = core.editor.read(() => $linkUnder(event.target)?.getURL() ?? null)
+    if (url === null) return
+    // A read-only root is not contenteditable, so the anchor would navigate natively.
+    event.preventDefault()
+    const href = linkHref(url)
+    const action = linkClickAction({
+      readOnly: !core.editor.isEditable(),
+      modifier: event.ctrlKey || event.metaKey || event.button === 1,
+      caretInLink,
+      detail: event.detail,
+      href,
+    })
+    caretInLink = false
+    if (action === 'open' && href !== null) window.open(href, '_blank', 'noopener,noreferrer')
+  }
+  root.addEventListener('pointerdown', onLinkPointerDown, true)
+  root.addEventListener('click', onLinkClick)
+  root.addEventListener('auxclick', onLinkClick)
+
   // Inside the wrapper, not on the body: a modal dialog makes everything outside it inert.
   // The root scrolls on its own, so the popup follows its paragraph on scroll.
   const wrapper = root.parentElement!
@@ -126,6 +168,9 @@ export function createRichEditor({ root, ...options }: RichEditorOptions): RichE
     destroy() {
       root.removeEventListener('click', onTaskClick)
       root.removeEventListener('pointerup', onTaskPointerUp)
+      root.removeEventListener('pointerdown', onLinkPointerDown, true)
+      root.removeEventListener('click', onLinkClick)
+      root.removeEventListener('auxclick', onLinkClick)
       stopPasteChoice()
       closePopup()
       root.removeEventListener('focusout', closeChoice)
