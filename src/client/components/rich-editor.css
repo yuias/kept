@@ -189,6 +189,146 @@
 }
 
 /*
+ * Link cards. `.rich-card` is the node's own element; `LinkCard` renders the
+ * box inside it. The 4px spacing is padding, not margin, so that consecutive
+ * cards keep a single 4px gap.
+ */
+.rich-card {
+  padding: 4px 0;
+}
+
+.rich-card + .rich-card {
+  padding-top: 0;
+}
+
+.rich-card-box {
+  display: flex;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  /* Nowrap titles and URLs must not widen the editor's min-content size. */
+  contain: inline-size;
+  height: 120px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--surface);
+}
+
+.rich-card-box:hover {
+  background: var(--surface-muted);
+}
+
+/* The card selected as a node, which Backspace and Delete remove. */
+.rich-card-selected > .rich-card-box {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rich-card-thumb {
+  flex: none;
+  width: 32%;
+  max-width: 220px;
+  object-fit: cover;
+}
+
+.rich-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  /* The right padding keeps the text clear of the edit button. */
+  padding: 10px 42px 10px 14px;
+}
+
+.rich-card-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rich-card-desc {
+  margin-top: 2px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.rich-card-url {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  font-size: 0.8em;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.rich-card-url span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rich-card-favicon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.rich-card-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.rich-card-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rich-card-input[aria-invalid='true'] {
+  border-color: var(--text);
+}
+
+.rich-card-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.rich-card-edit:hover {
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+/*
  * Lists draw their own marks: one box per mark, wide enough for `1.` and
  * right-aligned, so the text starts at the same place after a bullet or a
  * number. A level steps in by the box plus the gap after it (2em); the text
@@ -323,6 +463,15 @@
     height: 100%;
     min-height: 0;
     max-height: none;
+  }
+
+  .rich-card-thumb {
+    width: 88px;
+  }
+
+  .rich-card-desc {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
   }
 
   .rich-table-scroll {

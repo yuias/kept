@@ -43,8 +43,12 @@ export class CardNode extends DecoratorNode<CardDecoration> {
     return self
   }
 
-  createDOM(_config: EditorConfig): HTMLElement {
-    return $getDocument().createElement('div')
+  createDOM(config: EditorConfig): HTMLElement {
+    const dom = $getDocument().createElement('div')
+    if (config.theme.card) dom.className = config.theme.card
+    // The view inside is not text; the browser must not put a caret in it.
+    dom.contentEditable = 'false'
+    return dom
   }
 
   updateDOM(): false {
