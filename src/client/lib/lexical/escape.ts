@@ -126,7 +126,7 @@ export const THEMATIC_BREAK = /^ {0,3}([-*_])(?: *\1){2,} *$/
 export interface LineStartBlocks {
   /** Thematic break lines (`---`, `* * *`); on while the importer reads them as a rule. */
   thematicBreak: boolean
-  /** Lines starting with `|`; on while the importer reads them as a table. */
+  /** The line starts with `|` and the importer would read it as part of a table (`isTableStart`); another `|` line is plain text. */
   tableRow: boolean
 }
 

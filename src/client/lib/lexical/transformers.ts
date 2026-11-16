@@ -9,6 +9,7 @@ import {
   type MultilineElementTransformer,
   type TextMatchTransformer,
 } from '@lexical/markdown'
+import { $isTableNode } from '@lexical/table'
 import {
   $getState,
   $isParagraphNode,
@@ -21,25 +22,42 @@ import {
   type LexicalNode,
 } from 'lexical'
 import { CARD_LINE_PATTERN, cardMarkup, parseCardLine } from '../../../shared/link-card'
-import { escapeLineStart, THEMATIC_BREAK, type LineStartBlocks } from './escape'
+import { escapeLineStart, THEMATIC_BREAK } from './escape'
 import { $createCardNode, $isCardNode, CardNode } from './nodes/card-node'
 import { $createImageNode, $isImageNode, ImageNode } from './nodes/image-node'
-
-// Table rows are plain paragraphs until the TABLE transformer exists; escaping
-// them now would change the bytes of notes that load and export unchanged.
-// Switch the flag on together with the transformer.
-const LINE_START_BLOCKS: LineStartBlocks = { thematicBreak: true, tableRow: false }
+import { exportTable, isTableStart } from './table-transformer'
 
 // Never matches: the transformer exists only to post-process what a paragraph
 // exports, so a paragraph must not be imported through it.
 const NEVER = /(?!)/
 
-/** Escapes the lines of a root paragraph that would reload as another block. */
+/**
+ * Escapes the lines of a root paragraph that would reload as another block. A
+ * line that starts with `|` is escaped only where the importer would read it as
+ * part of a table: it is followed by a delimiter row (a paragraph line, or the
+ * header row of the next table), or it directly follows a
+ * table (and would become one of its rows). Any other `|` line keeps its bytes.
+ */
 export const PARAGRAPH_LINE_START: ElementTransformer = {
   dependencies: [ParagraphNode],
   export: (node, exportChildren) => {
     if (!$isParagraphNode(node)) return null
-    return exportChildren(node).split('\n').map((line) => escapeLineStart(line, LINE_START_BLOCKS)).join('\n')
+    const lines = exportChildren(node).split('\n')
+    const next = node.getNextSibling()
+    const nextLine = (index: number): string | undefined =>
+      index + 1 < lines.length
+        ? lines[index + 1]
+        : $isParagraphNode(next)
+          ? exportChildren(next).split('\n')[0]
+          : $isTableNode(next)
+            ? exportTable(next, exportChildren).split('\n')[0]
+            : undefined
+    return lines
+      .map((line, index) => {
+        const tableRow = line.startsWith('|') && ((index === 0 && $isTableNode(node.getPreviousSibling())) || isTableStart(line, nextLine(index)))
+        return escapeLineStart(line, { thematicBreak: true, tableRow })
+      })
+      .join('\n')
   },
   regExp: NEVER,
   replace: () => false,

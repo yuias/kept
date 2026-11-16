@@ -29,10 +29,7 @@ const normalizeOut = load(
  * Fixtures whose conversion is not supported yet. The tests below assert that
  * each one still fails, so an entry that starts passing must be removed here.
  */
-const KNOWN_LOSSY = new Set<string>([
-  'tables',
-  'table-padding',
-])
+const KNOWN_LOSSY = new Set<string>([])
 
 const passesIdentical = (name: string): boolean => {
   const source = identical.get(name)!
