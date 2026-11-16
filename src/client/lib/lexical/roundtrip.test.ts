@@ -30,7 +30,6 @@ const normalizeOut = load(
  * each one still fails, so an entry that starts passing must be removed here.
  */
 const KNOWN_LOSSY = new Set<string>([
-  'list-code',
   'tables',
   'table-padding',
 ])

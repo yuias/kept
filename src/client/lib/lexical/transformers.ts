@@ -1,5 +1,7 @@
+import { $isCodeNode } from '@lexical/code-core'
 import { $createHorizontalRuleNode, $isHorizontalRuleNode, HorizontalRuleNode } from '@lexical/extension'
 import { $isAutoLinkNode, $isLinkNode } from '@lexical/link'
+import { $isListNode } from '@lexical/list'
 import {
   CODE,
   LINK,
@@ -7,7 +9,17 @@ import {
   type MultilineElementTransformer,
   type TextMatchTransformer,
 } from '@lexical/markdown'
-import { $isParagraphNode, $isRootNode, $isTextNode, IS_CODE, ParagraphNode } from 'lexical'
+import {
+  $getState,
+  $isParagraphNode,
+  $isRootNode,
+  $isTextNode,
+  $setState,
+  createState,
+  IS_CODE,
+  ParagraphNode,
+  type LexicalNode,
+} from 'lexical'
 import { CARD_LINE_PATTERN, cardMarkup, parseCardLine } from '../../../shared/link-card'
 import { escapeLineStart, THEMATIC_BREAK, type LineStartBlocks } from './escape'
 import { $createCardNode, $isCardNode, CardNode } from './nodes/card-node'
@@ -208,4 +220,40 @@ export const FENCED_CODE: MultilineElementTransformer = {
     return CODE.handleImportAfterStartMatch!({ ...args, lines: rewritten, startMatch: rewritten[startLineIndex]!.match(FENCE_START)! })
   },
   regExpStart: FENCE_START,
+}
+
+/** Leading whitespace of the fence line of a code block that was loaded right after a list. */
+export const fenceIndentState = createState('keptFenceIndent', {
+  parse: (value) => (typeof value === 'string' && /^[ \t]*$/.test(value) ? value : ''),
+})
+
+const $previousNonEmpty = (node: LexicalNode): LexicalNode | null => {
+  let previous = node.getPreviousSibling()
+  while ($isParagraphNode(previous) && previous.getTextContentSize() === 0) previous = previous.getPreviousSibling()
+  return previous
+}
+
+/**
+ * Import puts a fence inside a list item at the root after the list, and export
+ * flattens list items, so the indent would be lost. The fence's indent is kept
+ * in the node and written back in front of every non-empty line, but only while
+ * the block still follows a list: anywhere else an indent would turn it into an
+ * indented code block or lazy paragraph text.
+ */
+export const INDENTED_CODE: MultilineElementTransformer = {
+  ...FENCED_CODE,
+  handleImportAfterStartMatch: (args) => {
+    const handled = FENCED_CODE.handleImportAfterStartMatch!(args)
+    const code = args.rootNode.getLastChild()
+    const indent = /^[ \t]*/.exec(args.startMatch[1]!)![0]
+    if (handled && indent && $isCodeNode(code) && $isListNode($previousNonEmpty(code))) $setState(code, fenceIndentState, indent)
+    return handled
+  },
+  export: (node, ...rest) => {
+    const out = FENCED_CODE.export!(node, ...rest)
+    if (out === null || !$isCodeNode(node)) return out
+    const indent = $getState(node, fenceIndentState)
+    if (!indent || !$isListNode($previousNonEmpty(node))) return out
+    return out.split('\n').map((line) => (line ? indent + line : line)).join('\n')
+  },
 }

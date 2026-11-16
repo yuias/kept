@@ -26,7 +26,7 @@ import {
 } from 'lexical'
 import { type Edge, escapePlainText } from './escape'
 import { MarkdownNodesExtension } from './extension'
-import { CARD, CODE_SPAN, FENCED_CODE, IMAGE, KEPT_LINK, PARAGRAPH_LINE_START, RULE } from './transformers'
+import { CARD, CODE_SPAN, IMAGE, INDENTED_CODE, KEPT_LINK, PARAGRAPH_LINE_START, RULE } from './transformers'
 
 // Highlight (`==x==`) cannot be stored in markdown that GitHub-style readers
 // understand, so it stays plain text.
@@ -35,7 +35,7 @@ export const TRANSFORMERS: Transformer[] = [
     if (transformer === LINK) return [IMAGE, KEPT_LINK]
     // The rule and the check list read lines the list transformers would take.
     if (transformer === UNORDERED_LIST) return [RULE, CHECK_LIST, transformer]
-    return [transformer === CODE ? FENCED_CODE : transformer]
+    return [transformer === CODE ? INDENTED_CODE : transformer]
   }),
   CARD,
   CODE_SPAN,
