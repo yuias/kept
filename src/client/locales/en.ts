@@ -145,7 +145,6 @@ export const en = {
     imageUploading: 'Uploading image…',
     imageFailed: (message: string) => `Image failed: ${message}`,
     dismiss: 'Dismiss',
-    toggleTask: 'Toggle task',
     copyText: 'Copy text',
     copied: 'Copied',
     copyFailed: 'Copy failed',

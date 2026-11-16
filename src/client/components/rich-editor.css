@@ -22,7 +22,6 @@
 }
 
 .rich-editor {
-  /* Same tint as `CODE_TINT` in `lib/live/decorations.ts`. */
   --rich-code-bg: color-mix(in srgb, var(--text) 6%, transparent);
   min-height: 40vh;
   max-height: 60vh;
