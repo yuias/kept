@@ -216,6 +216,18 @@ describe('closing colon', () => {
     expect(block.markdown()).toBe('```\n:smile:\n```')
   })
 
+  it('does not convert inside a code span that is still being typed', async () => {
+    const t = create()
+    await typeText(t.editor, '`:smile:`')
+    expect(t.markdown()).toBe('`:smile:`')
+    const after = create()
+    await typeText(after.editor, '`a` :smile:')
+    expect(after.markdown()).toBe('`a` 😄')
+    const plain = create()
+    await typeText(plain.editor, 'a :smile:')
+    expect(plain.markdown()).toBe('a 😄')
+  })
+
   it('does not convert a caret that only moved over the colon', async () => {
     const t = create()
     await typeText(t.editor, ':nosuch:')

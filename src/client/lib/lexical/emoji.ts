@@ -1,5 +1,5 @@
 import { $isCodeNode } from '@lexical/code-core'
-import { $findMatchingParent } from '@lexical/utils'
+import { $findMatchingParent, $getNearestBlockElementAncestorOrThrow } from '@lexical/utils'
 import {
   $getNodeByKey,
   $getSelection,
@@ -11,6 +11,7 @@ import {
   HISTORY_PUSH_TAG,
   type LexicalEditor,
   PASTE_TAG,
+  type TextNode,
 } from 'lexical'
 import type { CompositionGate } from './composition'
 import { EXTERNAL_TAG } from './sync'
@@ -133,10 +134,52 @@ export function pickEmoji(editor: LexicalEditor, gate: CompositionGate, emoji: s
 }
 
 /**
+ * Whether an odd number of backticks come before `offset` in the node's block. The shortcode
+ * then sits in what becomes inline code once its closing backtick is typed, which is too late
+ * to see in the format of the text.
+ */
+function $afterOpenBacktick(node: TextNode, offset: number): boolean {
+  let before = ''
+  for (const text of $getNearestBlockElementAncestorOrThrow(node).getAllTextNodes()) {
+    if (text.is(node)) {
+      before += text.getTextContent().slice(0, offset)
+      break
+    }
+    before += text.getTextContent()
+  }
+  return (before.match(/`/g)?.length ?? 0) % 2 === 1
+}
+
+/**
+ * Replaces `:name:` at `start` of the text node `key` with `emoji`, if that text is still
+ * there and still outside code. The caret ends up after the emoji when it was right after the
+ * shortcode, and keeps its place in the text otherwise.
+ */
+function $replaceShortcodeAt(key: string, start: number, name: string, emoji: string): void {
+  const node = $getNodeByKey(key)
+  if (!$isTextNode(node) || node.hasFormat('code') || $findMatchingParent(node, $isCodeNode)) return
+  const length = name.length + 2
+  if (node.getTextContent().slice(start, start + length) !== `:${name}:` || $afterOpenBacktick(node, start)) return
+  const selection = $getSelection()
+  const range = $isRangeSelection(selection) ? selection : null
+  if (range?.isCollapsed() && range.anchor.key === key && range.anchor.offset === start + length) {
+    node.spliceText(start, length, emoji, true)
+    return
+  }
+  node.spliceText(start, length, emoji)
+  if (!range) return
+  for (const point of [range.anchor, range.focus]) {
+    if (point.key === key && point.offset >= start + length) point.set(key, point.offset - (length - emoji.length), 'text')
+  }
+}
+
+/**
  * Typing the closing colon of a known `:name:` turns it into the emoji. Only typing counts:
  * pasted, synced, undone or composed text keeps its `:smile:`. Like the task shortcut it runs
  * from an update listener, so the typed colon is already in the history and undo gives
- * `:smile:` back. It also starts loading the list at the first colon that can open a shortcode.
+ * `:smile:` back. It also starts loading the list at the first colon typed that can open a
+ * shortcode; a closing colon typed before the list is there converts when it arrives, if that
+ * text is still where it was.
  */
 export function registerEmojiShortcut(editor: LexicalEditor): () => void {
   return editor.registerUpdateListener(({ tags, editorState, prevEditorState }) => {
@@ -159,29 +202,31 @@ export function registerEmojiShortcut(editor: LexicalEditor): () => void {
       const text = node.getTextContent()
       // One character inserted at the caret; a caret that only moved right over a colon is not typing.
       const previous = prevEditorState.read(() => {
-        const before = $getSelection()
+        // Typing into an empty block creates the text node.
         const was = $getNodeByKey(key)
-        return $isRangeSelection(before) && before.isCollapsed() && before.anchor.key === key && before.anchor.offset === offset - 1 && was
+        if (!was) return ''
+        const before = $getSelection()
+        return $isRangeSelection(before) && before.isCollapsed() && before.anchor.key === key && before.anchor.offset === offset - 1
           ? was.getTextContent()
           : null
       })
       if (previous !== text.slice(0, offset - 1) + text.slice(offset) || text.charAt(offset - 1) !== ':') return null
-      return shortcodeBefore(text, offset, 0)
+      const code = shortcodeBefore(text, offset, 0)
+      return code && { ...code, key, inCode: code.closed && $afterOpenBacktick(node, code.start) }
     })
     if (!typed) return
     const index = loadedEmojiIndex()
     if (!index) void loadEmojiIndex()
-    if (!typed.closed) return
+    if (!typed.closed || typed.inCode) return
 
     const convert = (known: EmojiIndex): void => {
       const emoji = known.byName.get(typed.name)
       if (emoji === undefined) return
-      editor.update(() => void $replaceShortcode(emoji), { tag: [HISTORY_PUSH_TAG] })
+      editor.update(() => $replaceShortcodeAt(typed.key, typed.start, typed.name, emoji), { tag: [HISTORY_PUSH_TAG] })
     }
     if (index) return convert(index)
-    // The list is still on its way; the colon only counts if nothing else happened since.
     void loadEmojiIndex().then((loadedIndex) => {
-      if (loadedIndex && editor.getEditorState() === editorState && !editor.isComposing()) convert(loadedIndex)
+      if (loadedIndex && !editor.isComposing()) convert(loadedIndex)
     })
   })
 }
